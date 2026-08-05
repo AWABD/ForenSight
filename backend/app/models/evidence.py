@@ -1,14 +1,14 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, BigInteger, DateTime, ForeignKey, JSON
+from sqlalchemy import Column, String, BigInteger, DateTime, ForeignKey, JSON, UUID
 from sqlalchemy.orm import relationship
 from app.database import Base
 
 class EvidenceFile(Base):
     __tablename__ = "evidence_files"
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    case_id = Column(String(36), ForeignKey("cases.id", ondelete="CASCADE"), nullable=False)
+    id = Column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid.uuid4()))
+    case_id = Column(UUID(as_uuid=False), ForeignKey("cases.id", ondelete="CASCADE"), nullable=False)
     file_name = Column(String(255), nullable=False)
     original_path = Column(String(1024), nullable=True)
     file_size_bytes = Column(BigInteger, nullable=False)

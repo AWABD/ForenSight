@@ -1,14 +1,14 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Integer, Text, Float, DateTime, ForeignKey, JSON
+from sqlalchemy import Column, String, Integer, Text, Float, DateTime, ForeignKey, JSON, UUID
 from sqlalchemy.orm import relationship
 from app.database import Base
 
 class OCRText(Base):
     __tablename__ = "ocr_text"
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    evidence_id = Column(String(36), ForeignKey("evidence_files.id", ondelete="CASCADE"), nullable=False)
+    id = Column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid.uuid4()))
+    evidence_id = Column(UUID(as_uuid=False), ForeignKey("evidence_files.id", ondelete="CASCADE"), nullable=False)
     page_number = Column(Integer, default=1, nullable=False)
     extracted_text = Column(Text, nullable=False)
     bounding_boxes = Column(JSON, nullable=True)

@@ -1,15 +1,15 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Text, DateTime, ForeignKey
+from sqlalchemy import Column, String, Text, DateTime, ForeignKey, UUID
 from sqlalchemy.orm import relationship
 from app.database import Base
 
 class TimelineEvent(Base):
     __tablename__ = "timeline_events"
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    case_id = Column(String(36), ForeignKey("cases.id", ondelete="CASCADE"), nullable=False)
-    evidence_file_id = Column(String(36), ForeignKey("evidence_files.id", ondelete="SET NULL"), nullable=True)
+    id = Column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid.uuid4()))
+    case_id = Column(UUID(as_uuid=False), ForeignKey("cases.id", ondelete="CASCADE"), nullable=False)
+    evidence_file_id = Column(UUID(as_uuid=False), ForeignKey("evidence_files.id", ondelete="SET NULL"), nullable=True)
     event_timestamp = Column(DateTime, nullable=False, default=datetime.utcnow)
     timestamp_source = Column(String(100), nullable=False) # EXIF, Syslog, SQLite, etc.
     event_type = Column(String(100), nullable=False)       # SYS_LOGIN, FILE_CREATE, DB_DELETE, etc.
