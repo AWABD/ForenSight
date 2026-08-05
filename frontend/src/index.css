@@ -1,43 +1,43 @@
 @import "tailwindcss";
 
 @theme {
-  --color-primary: #10b981;
-  --color-primary-dark: #047857;
-  --color-accent: #34d399;
-  --color-accent-dark: #059669;
-  --color-success: #10b981;
-  --color-warning: #f59e0b;
+  --color-primary: #39ff14; /* Ben 10 Omnitrix Radioactive Green */
+  --color-primary-dark: #00cc00;
+  --color-accent: #00ff00;
+  --color-accent-dark: #1f8b05;
+  --color-success: #39ff14;
+  --color-warning: #eab308;
   --color-danger: #ef4444;
   
-  /* ForenSight Specific Colors - Matrix Green Theme */
-  --color-forensic-navy: #050c08;
-  --color-forensic-slate: #0b1a13;
-  --color-forensic-glow: #10b981;
+  /* ForenSight Specific Colors - Ben 10 Omnitrix Theme */
+  --color-forensic-navy: #020704;
+  --color-forensic-slate: #061a0f;
+  --color-forensic-glow: #39ff14;
   
   --font-sans: "Inter", "Outfit", ui-sans-serif, system-ui, sans-serif;
 }
 
 :root {
   --background: #f0fdf4;
-  --foreground: #062f1e;
-  --card: #e6fcf0;
-  --border: #bbf7d0;
-  --muted: #15803d;
+  --foreground: #022c16;
+  --card: #e6fdf0;
+  --border: #86efac;
+  --muted: #166534;
   --glass: rgba(240, 253, 244, 0.7);
-  --glass-border: rgba(187, 247, 208, 0.8);
+  --glass-border: rgba(134, 239, 172, 0.8);
   font-family: var(--font-sans);
   color-scheme: light;
 }
 
 /* Dark mode overrides by class */
 .dark {
-  --background: #040c08;
-  --foreground: #e6fcf0;
-  --card: #08160e;
-  --border: #133a24;
-  --muted: #34d399;
-  --glass: rgba(4, 12, 8, 0.75);
-  --glass-border: rgba(19, 58, 36, 0.8);
+  --background: #020604;
+  --foreground: #e6fdf0;
+  --card: #05140c;
+  --border: #134e2a;
+  --muted: #39ff14;
+  --glass: rgba(2, 6, 4, 0.75);
+  --glass-border: rgba(19, 78, 42, 0.8);
   color-scheme: dark;
 }
 
