@@ -25,3 +25,4 @@ class EvidenceFile(Base):
     # Relationships
     case = relationship("Case", back_populates="evidence_files")
     timeline_events = relationship("TimelineEvent", back_populates="evidence_file", cascade="all, delete-orphan")
+    ocr_records = relationship("OCRText", back_populates="evidence_file", cascade="all, delete-orphan")

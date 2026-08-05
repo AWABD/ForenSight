@@ -213,6 +213,32 @@ def run_tests():
     assert len(timeline) >= 1
     print(f"[+] Analyst verified timeline extraction. Logged events: {len(timeline)}")
 
+    # 5.5 OCR Engine API Tests
+    print("\nTesting OCR Engine APIs (EasyOCR vs PaddleOCR Comparison)...")
+    # Trigger OCR run
+    response = client.post(f"/api/v1/cases/{case_id}/evidence/{evidence_id}/ocr", headers=lead_headers)
+    assert response.status_code == 201, f"OCR POST failed: {response.json()}"
+    ocr_data = response.json()
+    assert "record" in ocr_data
+    assert "extracted_text" in ocr_data["record"]
+    assert ocr_data["record"]["confidence_score"] > 80.0
+    assert "extracted_data" in ocr_data
+    assert "dates" in ocr_data["extracted_data"]
+    assert "numbers" in ocr_data["extracted_data"]
+    assert "comparison" in ocr_data
+    assert "easyocr" in ocr_data["comparison"]
+    assert "paddleocr" in ocr_data["comparison"]
+    print(f"[+] OCR pipeline ran. Extracted text length: {len(ocr_data['record']['extracted_text'])}")
+    print(f"[+] EasyOCR time: {ocr_data['comparison']['easyocr']['inference_time_seconds']}s, PaddleOCR time: {ocr_data['comparison']['paddleocr']['inference_time_seconds']}s")
+
+    # Fetch saved OCR records
+    response = client.get(f"/api/v1/cases/{case_id}/evidence/{evidence_id}/ocr", headers=analyst_headers)
+    assert response.status_code == 200, f"OCR GET failed: {response.json()}"
+    ocr_records = response.json()
+    assert len(ocr_records) >= 1
+    assert ocr_records[0]["extracted_text"] == ocr_data["record"]["extracted_text"]
+    print(f"[+] Successfully retrieved {len(ocr_records)} saved OCR database record(s).")
+
     # 6. Cryptographic Chain of Custody Audit Ledger tests
     response = client.get(f"/api/v1/cases/{case_id}/audit/", headers=auditor_headers)
     assert response.status_code == 200

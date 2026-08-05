@@ -12,6 +12,9 @@ from app.services.file_service import FileService
 from app.services.audit_service import AuditService
 from app.services.rate_limiter import RateLimiterDependency
 from app.utils.logging_config import logger
+from app.models.ocr import OCRText
+from app.schemas.ocr import OCRResponse, OCRTextOut
+from app.services.ocr_service import OCRService
 
 router = APIRouter(prefix="/cases/{case_id}/evidence", tags=["Evidence Management"])
 
@@ -151,3 +154,81 @@ def get_evidence(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evidence file not found")
         
     return evidence
+
+@router.post("/{evidence_id}/ocr", response_model=OCRResponse, status_code=status.HTTP_201_CREATED)
+def run_ocr_on_evidence(
+    case_id: str,
+    evidence_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(RoleChecker(["SysAdmin", "LeadInvestigator", "Analyst"]))
+):
+    """
+    Executes optical character recognition (OCR) comparison parsing on evidence file.
+    Runs EasyOCR and PaddleOCR comparison vectors, extracts Text, Tables, Numbers, Dates.
+    Saves outputs to the database and appends ledger blocks.
+    """
+    evidence = db.query(EvidenceFile).filter(
+        EvidenceFile.case_id == case_id,
+        EvidenceFile.id == evidence_id
+    ).first()
+    
+    if not evidence:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evidence file not found")
+        
+    # Execute OCR service
+    ocr_result = OCRService.run_ocr_pipeline(evidence.storage_vault_key, evidence.file_name)
+    
+    # Save output to database
+    db_ocr = OCRText(
+        evidence_id=evidence.id,
+        page_number=1,
+        extracted_text=ocr_result["extracted_text"],
+        bounding_boxes=ocr_result["bounding_boxes"],
+        confidence_score=ocr_result["confidence_score"]
+    )
+    db.add(db_ocr)
+    
+    # Record timeline action
+    new_timeline_event = TimelineEvent(
+        case_id=case_id,
+        evidence_file_id=evidence.id,
+        timestamp_source="AI OCR Engine",
+        event_type="AI_INFERENCE",
+        description=f"Executed OCR engine scans (EasyOCR & PaddleOCR). Extracted text characters with {ocr_result['confidence_score']:.1f}% confidence.",
+        severity="INFO"
+    )
+    db.add(new_timeline_event)
+    
+    # Audit CoC ledger block
+    AuditService.append_audit_event(
+        db=db,
+        action_type=f"OCR_EXTRACTION_COMPLETED: {evidence.file_name} (Confidence: {ocr_result['confidence_score']:.1f}%)",
+        operator_id=current_user.id,
+        associated_item_id=evidence.id
+    )
+    db.commit()
+    db.refresh(db_ocr)
+    
+    return {
+        "record": db_ocr,
+        "extracted_data": ocr_result["extracted_data"],
+        "comparison": ocr_result["comparison"]
+    }
+
+@router.get("/{evidence_id}/ocr", response_model=List[OCRTextOut])
+def get_ocr_records(
+    case_id: str,
+    evidence_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(RoleChecker(["SysAdmin", "LeadInvestigator", "Analyst", "LegalAuditor"]))
+):
+    """Retrieves all saved OCR scanner outputs for specific evidence file."""
+    evidence = db.query(EvidenceFile).filter(
+        EvidenceFile.case_id == case_id,
+        EvidenceFile.id == evidence_id
+    ).first()
+    
+    if not evidence:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evidence file not found")
+        
+    return db.query(OCRText).filter(OCRText.evidence_id == evidence_id).all()
