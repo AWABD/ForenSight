@@ -62,10 +62,25 @@ class FileService:
             if not header_bytes.startswith(b"SQLite format 3\x00"):
                 logger.warning(f"File signature mismatch: SQLite database with mismatching header on '{filename}'")
                 return False
-        elif ext in [".log", ".txt", ".csv"]:
+        elif ext in [".log", ".txt", ".csv", ".eml"]:
             # Ensure text formats contain clean printable characters, no binary control nulls
             if b"\x00" in header_bytes[:512]:
-                logger.warning(f"File signature mismatch: Text/log extension with binary null bytes detected on '{filename}'")
+                logger.warning(f"File signature mismatch: Text/log/eml extension with binary null bytes detected on '{filename}'")
+                return False
+        elif ext == ".pdf":
+            # PDF header starts with %PDF
+            if not header_bytes.startswith(b"%PDF"):
+                logger.warning(f"File signature mismatch: PDF extension with mismatching header on '{filename}'")
+                return False
+        elif ext in [".zip", ".docx"]:
+            # PKWare Zip format header (PK\x03\x04)
+            if not header_bytes.startswith(b"PK\x03\x04"):
+                logger.warning(f"File signature mismatch: Zip/Docx archive extension with mismatching header on '{filename}'")
+                return False
+        elif ext == ".msg":
+            # Microsoft Outlook MSG format header
+            if not header_bytes.startswith(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"):
+                logger.warning(f"File signature mismatch: Outlook MSG extension with mismatching header on '{filename}'")
                 return False
                 
         return True
@@ -151,6 +166,24 @@ class FileService:
                 "camera": "iPhone 13" if "exif" in clean_name.lower() else "Unknown camera body",
                 "gps": "28.6139, 77.2090 (New Delhi)" if "exif" in clean_name.lower() else "34.0522, -118.2437 (Los Angeles)",
                 "timestamp": "2026-07-28T08:12:00Z"
+            }
+        elif extension == ".pdf":
+            metadata["exif"] = {
+                "camera": "Adobe Acrobat PDF Parser",
+                "gps": "N/A (Document Metadata)",
+                "timestamp": "2026-07-28T09:30:15Z"
+            }
+        elif extension in [".zip", ".docx"]:
+            metadata["exif"] = {
+                "camera": "Zip Archive Inspector v1.0",
+                "gps": "N/A (Logical Archive)",
+                "timestamp": "2026-07-28T10:14:02Z"
+            }
+        elif extension in [".eml", ".msg"]:
+            metadata["exif"] = {
+                "camera": "Internet Message Headers Parser",
+                "gps": "IP: 192.168.12.93 (Origin)",
+                "timestamp": "2026-07-28T08:10:00Z"
             }
 
         # Mock Anomalies detection matching frontend templates
