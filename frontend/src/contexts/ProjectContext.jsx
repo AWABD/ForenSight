@@ -1,8 +1,10 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 
 const ProjectContext = createContext();
 
-// SHA-256 Mock generator
+const API_BASE_URL = 'http://127.0.0.1:8000/api/v1';
+
+// SHA-256 Mock generator fallback
 const generateHash = (fileName) => {
   let hash = 0;
   for (let i = 0; i < fileName.length; i++) {
@@ -23,7 +25,7 @@ const initialCases = [
     referenceNumber: 'REF-83893-IND',
     assignedTo: 'Lead Investigator Dr. A. Sharma',
     createdAt: '2026-07-28T09:30:00Z',
-    evidenceCount: 5,
+    evidenceCount: 3,
     anomalyRate: '32%'
   },
   {
@@ -35,20 +37,8 @@ const initialCases = [
     referenceNumber: 'REF-92384-US',
     assignedTo: 'Examiner Protyush B.',
     createdAt: '2026-07-30T14:15:00Z',
-    evidenceCount: 4,
+    evidenceCount: 3,
     anomalyRate: '75%'
-  },
-  {
-    id: 'c3',
-    caseNumber: 'FS-2026-052',
-    title: 'Host Intrusion & Keylogger Deployment',
-    description: 'System log inspection of registry changes, memory artifacts, and suspicious outbound connections from critical hosts.',
-    status: 'UNDER_REVIEW',
-    referenceNumber: 'REF-73891-DE',
-    assignedTo: 'Analyst Sarah Connor',
-    createdAt: '2026-07-15T08:00:00Z',
-    evidenceCount: 6,
-    anomalyRate: '12%'
   }
 ];
 
@@ -144,20 +134,17 @@ const initialTimeline = {
   'c1': [
     { id: 't1_1', timestamp: '2026-07-28T08:10:00Z', type: 'SYS_LOGIN', source: 'auth_syslog.log', description: 'User root logged in from unexpected IP 192.168.12.93', severity: 'CRITICAL' },
     { id: 't1_2', timestamp: '2026-07-28T08:12:00Z', type: 'FILE_CREATE', source: 'agent_metadata_exif.jpg', description: 'Snapshot image generated and saved to critical document directories', severity: 'INFO' },
-    { id: 't1_3', timestamp: '2026-07-28T08:14:10Z', type: 'DB_DELETE', source: 'db_ledger_dump.sqlite', description: 'DELETE statement executed: cleared 12 transaction rows from customer_ledgers table', severity: 'HIGH' },
-    { id: 't1_4', timestamp: '2026-07-28T08:20:00Z', type: 'SYS_LOGOUT', source: 'auth_syslog.log', description: 'User root logged out. Session duration: 10 mins', severity: 'INFO' }
+    { id: 't1_3', timestamp: '2026-07-28T08:14:10Z', type: 'DB_DELETE', source: 'db_ledger_dump.sqlite', description: 'DELETE statement executed: cleared 12 transaction rows from customer_ledgers table', severity: 'HIGH' }
   ],
   'c2': [
     { id: 't2_1', timestamp: '2026-07-30T10:00:00Z', type: 'SOURCE_GIT', source: 'source_repository_logs.csv', description: 'Branch merge: master pulled from user dev_compromised', severity: 'WARNING' },
-    { id: 't2_2', timestamp: '2026-07-30T11:15:30Z', type: 'AUDIO_CREATE', source: 'ceo_audio_statement.mp3', description: 'Voice memo file generated. AI metrics flag synthetic rendering', severity: 'CRITICAL' },
-    { id: 't2_3', timestamp: '2026-07-30T12:00:02Z', type: 'METADATA_SPOOF', source: 'employee_record_tampered.jpg', description: 'Image EXIF modifications: Timestamp manual set retroactively to 2020', severity: 'HIGH' }
+    { id: 't2_2', timestamp: '2026-07-30T11:15:30Z', type: 'AUDIO_CREATE', source: 'ceo_audio_statement.mp3', description: 'Voice memo file generated. AI metrics flag synthetic rendering', severity: 'CRITICAL' }
   ]
 };
 
 const initialLogs = [
   { id: 'l1', timestamp: '2026-07-31T06:00:20Z', operator: 'Lead Investigator Dr. A. Sharma', action: 'Uploaded db_ledger_dump.sqlite', blockHash: '8b9d88...efa312' },
-  { id: 'l2', timestamp: '2026-07-31T06:05:44Z', operator: 'ForenSight Core Engine', action: 'Computed baseline SHA-256 checks', blockHash: 'ff9d3a...bd2291' },
-  { id: 'l3', timestamp: '2026-07-31T06:10:00Z', operator: 'AI Pipeline: EasyOCR', action: 'Scanned employee_record_tampered.jpg, extracted text: "Clearance Lvl 4"', blockHash: '439a38...0be8e1' }
+  { id: 'l2', timestamp: '2026-07-31T06:05:44Z', operator: 'ForenSight Core Engine', action: 'Computed baseline SHA-256 checks', blockHash: 'ff9d3a...bd2291' }
 ];
 
 export const ProjectProvider = ({ children }) => {
@@ -166,12 +153,152 @@ export const ProjectProvider = ({ children }) => {
   const [evidence, setEvidence] = useState(initialEvidence);
   const [timeline, setTimeline] = useState(initialTimeline);
   const [auditLogs, setAuditLogs] = useState(initialLogs);
+  const [backendActive, setBackendActive] = useState(false);
   
-  const activeCase = cases.find(c => c.id === selectedCaseId) || cases[0];
+  // Real-time synchronization loader
+  const refreshData = async () => {
+    const token = localStorage.getItem('token');
+    const authHeader = token ? { 'Authorization': `Bearer ${token}` } : {};
+
+    try {
+      // 1. Fetch Cases
+      const casesRes = await fetch(`${API_BASE_URL}/cases/`, { headers: authHeader });
+      if (!casesRes.ok) throw new Error("API Offline or unauthorized");
+      
+      const rawCases = await casesRes.json();
+      setBackendActive(true);
+
+      const parsedCases = rawCases.map(c => ({
+        id: c.id,
+        caseNumber: c.case_number,
+        title: c.title,
+        description: c.description,
+        status: c.status,
+        referenceNumber: c.reference_number,
+        assignedTo: 'Lead Investigator (Active Session)',
+        createdAt: c.created_at,
+        evidenceCount: 0,
+        anomalyRate: '0%'
+      }));
+
+      // 2. Fetch evidence, timeline, and audit logs for each case
+      const newEvidence = {};
+      const newTimeline = {};
+      let allAuditLogs = [];
+
+      for (const c of parsedCases) {
+        // Fetch Evidence Files
+        const evRes = await fetch(`${API_BASE_URL}/cases/${c.id}/evidence/`, { headers: authHeader });
+        let evList = [];
+        if (evRes.ok) {
+          const rawEv = await evRes.json();
+          evList = rawEv.map(e => ({
+            id: e.id,
+            fileName: e.file_name,
+            fileSize: e.file_size_bytes,
+            fileType: e.file_type,
+            sha256: e.sha256_hash,
+            sha3: e.sha3_hash,
+            ingestedAt: e.ingested_at,
+            exif: e.exif,
+            anomalies: e.anomalies || []
+          }));
+          c.evidenceCount = evList.length;
+          // Calculate mock/real anomaly rate based on warning counts
+          const anomaliesCount = evList.filter(e => e.anomalies.length > 0).length;
+          c.anomalyRate = evList.length > 0 ? `${Math.round((anomaliesCount / evList.length) * 100)}%` : '0%';
+        }
+        newEvidence[c.id] = evList;
+
+        // Fetch Timeline Events
+        const timeRes = await fetch(`${API_BASE_URL}/cases/${c.id}/timeline/`, { headers: authHeader });
+        if (timeRes.ok) {
+          const rawTime = await timeRes.json();
+          newTimeline[c.id] = rawTime.map(t => ({
+            id: t.id,
+            timestamp: t.event_timestamp,
+            type: t.event_type,
+            source: t.timestamp_source,
+            description: t.description,
+            severity: t.severity
+          }));
+        }
+
+        // Fetch Audit Logs
+        const auditRes = await fetch(`${API_BASE_URL}/cases/${c.id}/audit/`, { headers: authHeader });
+        if (auditRes.ok) {
+          const rawAudit = await auditRes.json();
+          const caseAudits = rawAudit.map(a => ({
+            id: a.block_id,
+            timestamp: a.record_timestamp,
+            operator: 'Examiner Session ID',
+            action: a.action_type,
+            blockHash: a.active_block_hash
+          }));
+          allAuditLogs = [...allAuditLogs, ...caseAudits];
+        }
+      }
+
+      setCases(parsedCases);
+      setEvidence(newEvidence);
+      setTimeline(newTimeline);
+      if (allAuditLogs.length > 0) {
+        setAuditLogs(allAuditLogs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)));
+      }
+
+      // Automatically sync selectedCaseId if the active selection doesn't exist
+      if (parsedCases.length > 0 && !parsedCases.find(pc => pc.id === selectedCaseId)) {
+        setSelectedCaseId(parsedCases[0].id);
+      }
+
+    } catch (err) {
+      console.warn("FastAPI service offline. Running in high-fidelity mock Sandbox mode.");
+      setBackendActive(false);
+    }
+  };
+
+  // Sync on context mount and periodic polling interval
+  useEffect(() => {
+    refreshData();
+    const interval = setInterval(refreshData, 10000); // Poll every 10s for real-time synchronization
+    return () => clearInterval(interval);
+  }, [selectedCaseId]);
+
+  const activeCase = cases.find(c => c.id === selectedCaseId) || cases[0] || initialCases[0];
   const caseEvidence = evidence[selectedCaseId] || [];
   const caseTimeline = timeline[selectedCaseId] || [];
 
-  const addCase = (newCase) => {
+  const addCase = async (newCase) => {
+    const token = localStorage.getItem('token');
+    const authHeader = token ? { 'Authorization': `Bearer ${token}` } : {};
+
+    if (backendActive) {
+      try {
+        const response = await fetch(`${API_BASE_URL}/cases/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...authHeader
+          },
+          body: JSON.stringify({
+            title: newCase.title,
+            description: newCase.description,
+            reference_number: newCase.referenceNumber || `REF-${Math.floor(10000 + Math.random() * 90000)}-IND`
+          })
+        });
+
+        if (response.ok) {
+          const c = await response.json();
+          await refreshData();
+          setSelectedCaseId(c.id);
+          return c;
+        }
+      } catch (err) {
+        console.error("Failed to post new case:", err);
+      }
+    }
+
+    // Fallback to local state if backend is offline
     const cId = `c_${Date.now()}`;
     const formatted = {
       id: cId,
@@ -189,13 +316,39 @@ export const ProjectProvider = ({ children }) => {
     setCases([...cases, formatted]);
     setEvidence({ ...evidence, [cId]: [] });
     setTimeline({ ...timeline, [cId]: [] });
-
-    // Append to Chain of Custody Audit
     appendAuditLog(`Created Case ${formatted.caseNumber} - ${formatted.title}`);
+    setSelectedCaseId(cId);
     return formatted;
   };
 
-  const addEvidenceFile = (caseId, file) => {
+  const addEvidenceFile = async (caseId, file) => {
+    const token = localStorage.getItem('token');
+    const authHeader = token ? { 'Authorization': `Bearer ${token}` } : {};
+
+    if (backendActive) {
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch(`${API_BASE_URL}/cases/${caseId}/evidence/upload`, {
+          method: 'POST',
+          headers: authHeader,
+          body: formData
+        });
+
+        if (response.ok) {
+          await refreshData();
+          return;
+        } else {
+          const errData = await response.json();
+          alert(`Ingest Blocked: ${errData.detail || 'Upload Failed'}`);
+        }
+      } catch (err) {
+        console.error("Failed to upload evidence to server:", err);
+      }
+    }
+
+    // Fallback to local mock state if backend is offline
     const fileId = `e_${Date.now()}`;
     const newFile = {
       id: fileId,
@@ -224,7 +377,7 @@ export const ProjectProvider = ({ children }) => {
       return c;
     }));
 
-    // Create a timeline event automatically for the ingestion
+    // Create timeline event automatically
     const newEvent = {
       id: `t_${Date.now()}`,
       timestamp: new Date().toISOString(),
@@ -245,9 +398,6 @@ export const ProjectProvider = ({ children }) => {
   const appendAuditLog = (action) => {
     const prevLog = auditLogs[auditLogs.length - 1];
     const prevHash = prevLog ? prevLog.blockHash : '0000000000000000000000000000000000000000';
-    
-    // Simulate Chain of Custody block-link hash calculation:
-    // H(block) = SHA256(action + prevHash)
     const activeHash = generateHash(action + prevHash).substring(0, 20);
 
     const logEntry = {
@@ -272,7 +422,9 @@ export const ProjectProvider = ({ children }) => {
       auditLogs,
       addCase,
       addEvidenceFile,
-      appendAuditLog
+      appendAuditLog,
+      backendActive,
+      refreshData
     }}>
       {children}
     </ProjectContext.Provider>

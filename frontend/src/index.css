@@ -1,43 +1,43 @@
 @import "tailwindcss";
 
 @theme {
-  --color-primary: #3b82f6;
-  --color-primary-dark: #1d4ed8;
-  --color-accent: #06b6d4;
-  --color-accent-dark: #0891b2;
+  --color-primary: #10b981;
+  --color-primary-dark: #047857;
+  --color-accent: #34d399;
+  --color-accent-dark: #059669;
   --color-success: #10b981;
   --color-warning: #f59e0b;
   --color-danger: #ef4444;
   
-  /* ForenSight Specific Colors */
-  --color-forensic-navy: #0b0f19;
-  --color-forensic-slate: #1e293b;
-  --color-forensic-glow: #22d3ee;
+  /* ForenSight Specific Colors - Matrix Green Theme */
+  --color-forensic-navy: #050c08;
+  --color-forensic-slate: #0b1a13;
+  --color-forensic-glow: #10b981;
   
   --font-sans: "Inter", "Outfit", ui-sans-serif, system-ui, sans-serif;
 }
 
 :root {
-  --background: #ffffff;
-  --foreground: #0f172a;
-  --card: #f8fafc;
-  --border: #e2e8f0;
-  --muted: #64748b;
-  --glass: rgba(255, 255, 255, 0.7);
-  --glass-border: rgba(226, 232, 240, 0.8);
+  --background: #f0fdf4;
+  --foreground: #062f1e;
+  --card: #e6fcf0;
+  --border: #bbf7d0;
+  --muted: #15803d;
+  --glass: rgba(240, 253, 244, 0.7);
+  --glass-border: rgba(187, 247, 208, 0.8);
   font-family: var(--font-sans);
   color-scheme: light;
 }
 
 /* Dark mode overrides by class */
 .dark {
-  --background: #0b0f17;
-  --foreground: #f8fafc;
-  --card: #111827;
-  --border: #1f2937;
-  --muted: #94a3b8;
-  --glass: rgba(11, 15, 23, 0.7);
-  --glass-border: rgba(31, 41, 55, 0.8);
+  --background: #040c08;
+  --foreground: #e6fcf0;
+  --card: #08160e;
+  --border: #133a24;
+  --muted: #34d399;
+  --glass: rgba(4, 12, 8, 0.75);
+  --glass-border: rgba(19, 58, 36, 0.8);
   color-scheme: dark;
 }
 
