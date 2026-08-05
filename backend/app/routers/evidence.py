@@ -10,11 +10,15 @@ from app.schemas.evidence import EvidenceOut
 from app.services.auth_service import get_current_user, RoleChecker
 from app.services.file_service import FileService
 from app.services.audit_service import AuditService
+from app.services.rate_limiter import RateLimiterDependency
 from app.utils.logging_config import logger
 
 router = APIRouter(prefix="/cases/{case_id}/evidence", tags=["Evidence Management"])
 
-@router.post("/upload", response_model=EvidenceOut, status_code=status.HTTP_202_ACCEPTED)
+# Rate limit for evidence upload
+upload_rate_limiter = RateLimiterDependency(limit=10, window_seconds=60, route_name="upload_evidence")
+
+@router.post("/upload", response_model=EvidenceOut, status_code=status.HTTP_202_ACCEPTED, dependencies=[Depends(upload_rate_limiter)])
 def upload_evidence(
     case_id: str,
     file: UploadFile = File(...),
@@ -27,6 +31,14 @@ def upload_evidence(
     Extracts forensic metadata (e.g., EXIF for images) and stubs anomalies based on tags.
     Creates timeline logs and appends blocks to Chain of Custody ledger.
     """
+    # Enforce file size limit of 100MB
+    MAX_FILE_SIZE = 100 * 1024 * 1024
+    if file.size and file.size > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="File exceeds maximum size limit of 100MB."
+        )
+
     # Verify case exists
     case = db.query(Case).filter(Case.id == case_id).first()
     if not case:
@@ -36,6 +48,12 @@ def upload_evidence(
     try:
         # Save upload to local secure vault and compute dual hashes
         target_path, size_bytes, sha256_hex, sha3_hex = FileService.save_and_hash_file(case_id, file)
+    except ValueError as val_err:
+        logger.warning(f"File validation rejected for upload in case '{case_id}': {val_err}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(val_err)
+        )
     except Exception as e:
         logger.error(f"In-stream upload failure for file '{file.filename}': {e}")
         raise HTTPException(
@@ -56,14 +74,17 @@ def upload_evidence(
             detail="Duplicate file error: A file with identical SHA256 hash already exists in this case."
         )
 
+    # Secure filename extraction and lookup properties
+    sanitized_filename = FileService.sanitize_filename(file.filename)
+
     # Perform metadata and anomaly parsing stubs
-    forensic_payload = FileService.extract_forensic_metadata(file.filename, target_path)
+    forensic_payload = FileService.extract_forensic_metadata(sanitized_filename, target_path)
 
     # Create Evidence File Database Record
     new_evidence = EvidenceFile(
         case_id=case_id,
-        file_name=file.filename,
-        original_path=file.filename, # logical path fallback
+        file_name=sanitized_filename,
+        original_path=file.filename, # Track unsanitized name as logical original path mapping
         file_size_bytes=size_bytes,
         file_type=file.content_type or "application/octet-stream",
         sha256_hash=sha256_hex,
@@ -83,7 +104,7 @@ def upload_evidence(
         evidence_file_id=new_evidence.id,
         timestamp_source="System Ingestion Engine",
         event_type="FILE_INGEST",
-        description=f"Ingested {file.filename} into secure storage vault. Baseline hashes computed successfully.",
+        description=f"Ingested {sanitized_filename} into secure storage vault. Baseline hashes computed successfully.",
         severity="INFO"
     )
     db.add(new_timeline_event)
@@ -92,12 +113,12 @@ def upload_evidence(
     # Append transaction block to cryptographic Chain of Custody ledger
     AuditService.append_audit_event(
         db=db,
-        action_type=f"FILE_INGESTED: {file.filename} (SHA256: {sha256_hex[:12]}...)",
+        action_type=f"FILE_INGESTED: {sanitized_filename} (SHA256: {sha256_hex[:12]}...)",
         operator_id=current_user.id,
         associated_item_id=new_evidence.id
     )
 
-    logger.info(f"Evidence file '{file.filename}' processed and linked to case '{case.case_number}'")
+    logger.info(f"Evidence file '{sanitized_filename}' processed and linked to case '{case.case_number}'")
     return new_evidence
 
 @router.get("/", response_model=List[EvidenceOut])

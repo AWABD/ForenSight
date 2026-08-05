@@ -1,4 +1,5 @@
 import jwt
+import uuid
 from datetime import datetime, timedelta
 from typing import Optional, List
 from fastapi import Depends, HTTPException, status
@@ -29,14 +30,17 @@ def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
-    """Generates a secure HS256-encoded JWT token."""
+    """Generates a secure HS256-encoded JWT token with a unique JTI (JWT ID)."""
     to_encode = data.copy()
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
         expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     
-    to_encode.update({"exp": expire})
+    to_encode.update({
+        "exp": expire,
+        "jti": uuid.uuid4().hex # Adds unique token identifier to prevent replay attacks and ensure signature variance
+    })
     encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
     return encoded_jwt
 
