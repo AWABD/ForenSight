@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 from pydantic import BaseModel, ConfigDict
 from app.schemas.user import UserOut
 
@@ -15,3 +15,17 @@ class AuditOut(BaseModel):
     signature_proof: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+class BlockVerificationDetail(BaseModel):
+    block_id: str
+    action_type: str
+    previous_hash: str
+    stored_hash: str
+    recomputed_hash: str
+    is_valid: bool
+
+class LedgerVerificationReport(BaseModel):
+    is_valid: bool
+    total_blocks: int
+    verified_blocks: List[BlockVerificationDetail]
+    violations: List[str]
