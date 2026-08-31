@@ -12,6 +12,8 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     full_name = Column(String(255), nullable=False)
     role_level = Column(String(50), nullable=False, default="Analyst") # SysAdmin, LeadInvestigator, Analyst, LegalAuditor
+    is_approved = Column(Boolean, default=False, nullable=False)
+    secret_code = Column(String(50), unique=True, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     # Relationships

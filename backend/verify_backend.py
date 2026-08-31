@@ -78,6 +78,12 @@ def run_tests():
         assert response.status_code == 201, f"Reg failed: {response.json()}"
         print(f"[+] Successfully registered user: {payload['email']} ({payload['role_level']})")
 
+    # Manually approve test users in database so they can log in
+    from sqlalchemy import text
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE users SET is_approved = TRUE"))
+    print("[+] Test users approved for verification login tests.")
+
     # Test Login & Token Generation (verifying JWT and Refresh Tokens)
     tokens = {}
     refresh_tokens = {}

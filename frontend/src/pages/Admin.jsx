@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { UserCheck, Cpu, HardDrive, ShieldCheck, RefreshCw, Layers, Sliders, ToggleLeft, ToggleRight } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { UserCheck, Cpu, HardDrive, ShieldCheck, RefreshCw, Layers, Sliders, ToggleLeft, ToggleRight, XCircle } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
 
 const Admin = () => {
@@ -10,16 +10,95 @@ const Admin = () => {
     llamaLocal: true
   });
 
-  const [clearanceRequests, setClearanceRequests] = useState([
-    { id: 'cr1', name: 'Analyst Protyush B.', badge: 'BADGE-IND-39182', clearance: 'Level 2 - Analyst', status: 'PENDING' },
-    { id: 'cr2', name: 'Examiner Sarah Connor', badge: 'BADGE-DE-72819', clearance: 'Level 3 - Investigator', status: 'APPROVED' }
-  ]);
+  const [clearanceRequests, setClearanceRequests] = useState([]);
+  const [loadingRequests, setLoadingRequests] = useState(false);
+
+  const fetchRequests = () => {
+    const token = localStorage.getItem('token');
+    if (!token || token === 'mock-sandbox-token') {
+      // Fallback mock requests
+      setClearanceRequests([
+        { id: 'cr1', full_name: 'Analyst Protyush B.', secret_code: 'FNS-REG-39182', role_level: 'Level 2 - Analyst', is_approved: false },
+        { id: 'cr2', full_name: 'Examiner Sarah Connor', secret_code: 'FNS-REG-72819', role_level: 'Level 3 - Investigator', is_approved: true }
+      ]);
+      return;
+    }
+
+    setLoadingRequests(true);
+    fetch('http://127.0.0.1:8000/api/v1/admin/registrations', {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    })
+    .then(res => {
+      if (!res.ok) throw new Error("Unauthorized admin access");
+      return res.json();
+    })
+    .then(data => {
+      setLoadingRequests(false);
+      setClearanceRequests(data);
+    })
+    .catch(err => {
+      setLoadingRequests(false);
+      console.warn("Failed fetching live registration requests. Displaying sandbox fallbacks.");
+      setClearanceRequests([
+        { id: 'cr1', full_name: 'Analyst Protyush B.', secret_code: 'FNS-REG-39182', role_level: 'Level 2 - Analyst', is_approved: false },
+        { id: 'cr2', full_name: 'Examiner Sarah Connor', secret_code: 'FNS-REG-72819', role_level: 'Level 3 - Investigator', is_approved: true }
+      ]);
+    });
+  };
+
+  useEffect(() => {
+    fetchRequests();
+  }, []);
 
   const handleClearanceApprove = (id) => {
-    setClearanceRequests(prev => prev.map(req => {
-      if (req.id === id) return { ...req, status: 'APPROVED' };
-      return req;
-    }));
+    const token = localStorage.getItem('token');
+    if (!token || token === 'mock-sandbox-token') {
+      setClearanceRequests(prev => prev.map(req => {
+        if (req.id === id) return { ...req, is_approved: true };
+        return req;
+      }));
+      return;
+    }
+
+    fetch(`http://127.0.0.1:8000/api/v1/admin/registrations/${id}/approve`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    })
+    .then(res => {
+      if (!res.ok) throw new Error("Approval request failed");
+      fetchRequests();
+    })
+    .catch(err => {
+      alert("Error approving clearance: " + err.message);
+    });
+  };
+
+  const handleClearanceReject = (id) => {
+    const token = localStorage.getItem('token');
+    if (!token || token === 'mock-sandbox-token') {
+      setClearanceRequests(prev => prev.filter(req => req.id !== id));
+      return;
+    }
+
+    if (!confirm("Are you sure you want to reject and delete this registration request?")) return;
+
+    fetch(`http://127.0.0.1:8000/api/v1/admin/registrations/${id}/reject`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    })
+    .then(res => {
+      if (!res.ok) throw new Error("Rejection request failed");
+      fetchRequests();
+    })
+    .catch(err => {
+      alert("Error rejecting clearance: " + err.message);
+    });
   };
 
   const toggleModel = (modelKey) => {
@@ -174,23 +253,35 @@ const Admin = () => {
               {clearanceRequests.map((req) => (
                 <div key={req.id} className="p-3 border rounded-xl bg-card/30 space-y-3 text-[10px] leading-relaxed">
                   <div className="flex justify-between items-center text-muted font-mono">
-                    <span>Badge ID: {req.badge}</span>
+                    <span>Code: {req.secret_code}</span>
                     <span className={`text-[8.5px] font-black uppercase ${
-                      req.status === 'APPROVED' ? 'text-success' : 'text-primary'
-                    }`}>{req.status}</span>
+                      req.is_approved ? 'text-success' : 'text-primary'
+                    }`}>
+                      {req.is_approved ? 'APPROVED' : 'PENDING'}
+                    </span>
                   </div>
                   <div>
-                    <h4 className="font-extrabold text-foreground leading-none">{req.name}</h4>
-                    <span className="text-muted block mt-0.5">Clearance: {req.clearance}</span>
+                    <h4 className="font-extrabold text-foreground leading-none">{req.full_name}</h4>
+                    <span className="text-muted block mt-0.5">Clearance: {req.role_level}</span>
+                    <span className="text-muted/70 block font-mono text-[9px] mt-0.5">{req.email}</span>
                   </div>
 
-                  {req.status === 'PENDING' && (
-                    <button
-                      onClick={() => handleClearanceApprove(req.id)}
-                      className="bg-primary hover:bg-primary-dark text-white rounded px-2.5 py-1 text-[9px] font-black tracking-wider transition-all select-none"
-                    >
-                      APPROVE SECURITY CLEARANCE
-                    </button>
+                  {!req.is_approved && (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleClearanceApprove(req.id)}
+                        className="bg-primary hover:bg-primary-dark text-white rounded px-2.5 py-1 text-[9px] font-black tracking-wider transition-all select-none cursor-pointer"
+                      >
+                        APPROVE
+                      </button>
+                      <button
+                        onClick={() => handleClearanceReject(req.id)}
+                        className="bg-danger/20 hover:bg-danger/30 text-danger border border-danger/30 rounded px-2.5 py-1 text-[9px] font-black tracking-wider transition-all select-none cursor-pointer flex items-center gap-1"
+                      >
+                        <XCircle size={10} />
+                        <span>REJECT</span>
+                      </button>
+                    </div>
                   )}
                 </div>
               ))}

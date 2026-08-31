@@ -11,6 +11,7 @@ const Register = ({ onGoToLogin }) => {
   const [justification, setJustification] = useState('');
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [secretCode, setSecretCode] = useState('');
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -35,14 +36,16 @@ const Register = ({ onGoToLogin }) => {
       }
       return res.json();
     })
-    .then(() => {
+    .then((data) => {
       setLoading(false);
+      setSecretCode(data.secret_code || `FNS-REG-${Math.random().toString(36).substring(2, 10).toUpperCase()}`);
       setSubmitted(true);
     })
     .catch((err) => {
       console.warn("FastAPI registration offline. Simulating local sandbox registration filing:", err);
       setTimeout(() => {
         setLoading(false);
+        setSecretCode(`FNS-REG-${Math.random().toString(36).substring(2, 10).toUpperCase()} (LOCAL)`);
         setSubmitted(true);
       }, 800);
     });
@@ -84,12 +87,21 @@ const Register = ({ onGoToLogin }) => {
             </div>
             <h2 className="text-2xl font-bold tracking-tight text-foreground">Clearance Request Filed</h2>
             <p className="text-xs text-muted leading-relaxed max-w-sm mx-auto">
-              Your request for clearance Level has been recorded onto the platform registration directories. 
-              The case lead supervisor will review your agency ID credentials before issuing a hardware token.
+              Your request for clearance has been submitted to the database administrator trace directory.
             </p>
+            
+            {/* Secret code card display */}
+            <div className="bg-forensic-slate/40 dark:bg-forensic-slate/80 border rounded-xl p-4 my-4 max-w-xs mx-auto space-y-2 text-center shadow-inner border-border">
+              <span className="text-[10px] text-muted font-bold tracking-wider block uppercase">Registration Check Secret Code</span>
+              <span className="text-sm font-mono font-bold tracking-widest text-primary block">{secretCode}</span>
+              <span className="text-[9px] text-muted/80 block leading-tight">
+                Save this code. You must present this to verify your name, email, clearance level, and approve status before your ID is fully generated.
+              </span>
+            </div>
+
             <button
               onClick={onGoToLogin}
-              className="mt-6 bg-primary hover:bg-primary-dark text-white rounded-lg px-6 py-2 text-xs font-bold transition-all shadow-lg hover:shadow-primary/30"
+              className="mt-6 bg-primary hover:bg-primary-dark text-white rounded-lg px-6 py-2.5 text-xs font-bold transition-all shadow-lg hover:shadow-primary/30"
             >
               Return to Login Portal
             </button>

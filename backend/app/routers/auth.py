@@ -6,7 +6,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.user import User, UserRefreshToken
-from app.schemas.user import UserCreate, UserLogin, Token, UserOut, TokenRefreshRequest
+from app.schemas.user import UserCreate, UserLogin, Token, UserOut, TokenRefreshRequest, UserRegistrationStatus
 from app.services.auth_service import verify_password, get_password_hash, create_access_token, get_current_user
 from app.services.audit_service import AuditService
 from app.services.rate_limiter import RateLimiterDependency
@@ -38,11 +38,14 @@ def register_user(user_in: UserCreate, db: Session = Depends(get_db)):
         )
     
     hashed_password = get_password_hash(user_in.password)
+    secret_code = f"FNS-REG-{secrets.token_hex(4).upper()}"
     new_user = User(
         email=user_in.email,
         password_hash=hashed_password,
         full_name=user_in.full_name,
-        role_level=user_in.role_level
+        role_level=user_in.role_level,
+        is_approved=False,
+        secret_code=secret_code
     )
     
     db.add(new_user)
@@ -52,11 +55,11 @@ def register_user(user_in: UserCreate, db: Session = Depends(get_db)):
     AuditService.append_audit_event(
         db=db,
         action_type=f"USER_REGISTRATION: {new_user.email} ({new_user.role_level})",
-        operator_id=new_user.id,
+        operator_id=None,  # Not approved/logged in yet, set to None
         associated_item_id=new_user.id
     )
     
-    logger.info(f"Registered new user: {new_user.email} with role: {new_user.role_level}")
+    logger.info(f"Registered new user request: {new_user.email} with code: {secret_code}")
     return new_user
 
 @router.post("/login", response_model=Token, dependencies=[Depends(login_rate_limiter)])
@@ -72,6 +75,14 @@ def login(login_data: UserLogin, db: Session = Depends(get_db)):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Check if registration is approved by database administrator
+    if not user.is_approved:
+        logger.warning(f"Login blocked: user '{user.email}' is not approved yet")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Clearance request pending database administrator approval."
         )
     
     # 1. Generate Access Token (short-lived, e.g. 15-30 minutes, using settings default)
@@ -208,3 +219,24 @@ def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db:
     
     access_token = create_access_token(data={"sub": user.email})
     return {"access_token": access_token, "token_type": "bearer"}
+
+@router.get("/registration-status/{secret_code}", response_model=UserRegistrationStatus)
+def check_registration_status(secret_code: str, db: Session = Depends(get_db)):
+    """
+    Enables new operators to query their account clearance and password status
+    using the secret code issued during submission.
+    """
+    user = db.query(User).filter(User.secret_code == secret_code).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invalid registration check code."
+        )
+    return UserRegistrationStatus(
+        full_name=user.full_name,
+        email=user.email,
+        role_level=user.role_level,
+        is_approved=user.is_approved,
+        secret_code=user.secret_code,
+        user_id=user.id if user.is_approved else None
+    )

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
-from app.database import engine, Base
+from app.database import engine, Base, migrate_database
 from app.routers import auth, users, cases, evidence, timeline, audit, admin
 from app.utils.logging_config import logger
 
@@ -9,7 +9,8 @@ from app.utils.logging_config import logger
 logger.info("Initializing database schemas...")
 try:
     Base.metadata.create_all(bind=engine)
-    logger.info("Database tables initialized successfully.")
+    migrate_database(engine)
+    logger.info("Database tables and migrations initialized successfully.")
 except Exception as e:
     logger.critical(f"Failed to initialize database tables: {e}")
 

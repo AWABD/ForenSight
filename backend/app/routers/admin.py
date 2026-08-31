@@ -1,5 +1,6 @@
 import os
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
+from typing import List
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from app.database import get_db
@@ -7,7 +8,9 @@ from app.config import settings
 from app.models.case import Case
 from app.models.evidence import EvidenceFile
 from app.models.user import User
+from app.schemas.user import UserOut
 from app.services.auth_service import RoleChecker
+from app.services.audit_service import AuditService
 from app.utils.logging_config import logger
 
 router = APIRouter(prefix="/admin", tags=["System Administration"])
@@ -63,3 +66,76 @@ def get_system_metrics(
         "active_background_threads": 2,
         "cpu_count": os.cpu_count() or 4
     }
+
+@router.get("/registrations", response_model=List[UserOut])
+def list_pending_registrations(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(RoleChecker(["SysAdmin"]))
+):
+    """
+    Lists all operator registration requests that are pending SysAdmin approval.
+    """
+    pending = db.query(User).filter(User.is_approved == False).all()
+    return pending
+
+@router.post("/registrations/{user_id}/approve", response_model=UserOut)
+def approve_registration(
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(RoleChecker(["SysAdmin"]))
+):
+    """
+    Approves a pending registration request, allowing the operator to log in.
+    """
+    user = db.query(User).filter(User.id == user_id, User.is_approved == False).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Pending registration request not found."
+        )
+    
+    user.is_approved = True
+    db.commit()
+    db.refresh(user)
+    
+    # Audit log
+    AuditService.append_audit_event(
+        db=db,
+        action_type=f"REGISTRATION_APPROVED: {user.email}",
+        operator_id=current_user.id,
+        associated_item_id=user.id
+    )
+    
+    logger.info(f"SysAdmin approved registration request: {user.email}")
+    return user
+
+@router.post("/registrations/{user_id}/reject")
+def reject_registration(
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(RoleChecker(["SysAdmin"]))
+):
+    """
+    Rejects and deletes a pending registration request.
+    """
+    user = db.query(User).filter(User.id == user_id, User.is_approved == False).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Pending registration request not found."
+        )
+    
+    email = user.email
+    db.delete(user)
+    db.commit()
+    
+    # Audit log
+    AuditService.append_audit_event(
+        db=db,
+        action_type=f"REGISTRATION_REJECTED: {email}",
+        operator_id=current_user.id,
+        associated_item_id=user_id
+    )
+    
+    logger.info(f"SysAdmin rejected registration request: {email}")
+    return {"detail": f"Registration request for {email} rejected and cleared."}

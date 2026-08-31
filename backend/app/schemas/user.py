@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Optional
 from pydantic import BaseModel, EmailStr, Field, ConfigDict
 
 class UserBase(BaseModel):
@@ -24,9 +25,19 @@ class TokenRefreshRequest(BaseModel):
 
 class UserOut(UserBase):
     id: str
+    is_approved: bool
+    secret_code: Optional[str] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+class UserRegistrationStatus(BaseModel):
+    full_name: str
+    email: str
+    role_level: str
+    is_approved: bool
+    secret_code: str
+    user_id: Optional[str] = None
 
 # Handle circular imports for Token
 Token.model_rebuild()
