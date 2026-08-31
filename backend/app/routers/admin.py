@@ -94,19 +94,34 @@ def approve_registration(
             detail="Pending registration request not found."
         )
     
+    import secrets
+    from app.services.auth_service import get_password_hash
+    
+    # Generate unique username
+    clean_name = "".join(c for c in user.full_name.lower() if c.isalnum())
+    username = f"op_{clean_name[:15]}_{secrets.token_hex(2)}"
+    
+    # Generate plain text passphrase
+    passphrase = f"fns-pass-{secrets.token_hex(3)}"
+    
+    # Save parameters
+    user.username = username
+    user.generated_passphrase = passphrase
+    user.password_hash = get_password_hash(passphrase)
     user.is_approved = True
+    
     db.commit()
     db.refresh(user)
     
     # Audit log
     AuditService.append_audit_event(
         db=db,
-        action_type=f"REGISTRATION_APPROVED: {user.email}",
+        action_type=f"REGISTRATION_APPROVED: {user.username} ({user.email or 'N/A'})",
         operator_id=current_user.id,
         associated_item_id=user.id
     )
     
-    logger.info(f"SysAdmin approved registration request: {user.email}")
+    logger.info(f"SysAdmin approved registration request: {user.username} ({user.email or 'N/A'})")
     return user
 
 @router.post("/registrations/{user_id}/reject")

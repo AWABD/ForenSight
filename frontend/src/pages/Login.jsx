@@ -1,15 +1,14 @@
 import React, { useState } from 'react';
-import { Fingerprint, Shield, Key, Eye, EyeOff, Loader2, ArrowLeft, Search, ShieldCheck, ShieldAlert } from 'lucide-react';
+import { Fingerprint, Shield, Key, Eye, EyeOff, Loader2, ArrowLeft, Search, ShieldCheck, ShieldAlert, Copy, Check } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 
 const Login = ({ onLoginSuccess, onGoToRegister }) => {
   const { darkMode } = useTheme();
   
   // Login form state
-  const [email, setEmail] = useState('sharma.forensics@agency.gov');
-  const [password, setPassword] = useState('••••••••••••');
+  const [username, setUsername] = useState('investigator_sharma');
+  const [password, setPassword] = useState('leadsecretpass');
   const [clearance, setClearance] = useState('LeadInvestigator');
-  const [hardwareToken, setHardwareToken] = useState('FNS-HW-99321-ACTIVATED');
   const [showPassword, setShowPassword] = useState(false);
   
   // App state controls
@@ -20,6 +19,7 @@ const Login = ({ onLoginSuccess, onGoToRegister }) => {
   // Status check state
   const [statusCheckCode, setStatusCheckCode] = useState('');
   const [statusData, setStatusData] = useState(null);
+  const [copiedField, setCopiedField] = useState(null); // 'user' or 'pass'
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -32,13 +32,14 @@ const Login = ({ onLoginSuccess, onGoToRegister }) => {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({ 
-        email, 
-        password: password === '••••••••••••' ? 'leadsecretpass' : password 
+        username, 
+        password,
+        selected_role: clearance
       })
     })
     .then(async (res) => {
       if (!res.ok) {
-        let errorMsg = "Incorrect email or password";
+        let errorMsg = "Incorrect username or password";
         try {
           const errData = await res.json();
           errorMsg = errData.detail || errorMsg;
@@ -64,7 +65,7 @@ const Login = ({ onLoginSuccess, onGoToRegister }) => {
         // Connection failure - fall back to offline sandbox mode
         console.warn("FastAPI backend offline. Logging in via Local Sandbox Mode:", err);
         localStorage.setItem('token', 'mock-sandbox-token');
-        localStorage.setItem('user', JSON.stringify({ email, full_name: "Investigator Sharma (Sandbox)", role_level: clearance }));
+        localStorage.setItem('user', JSON.stringify({ username, full_name: "Investigator Sharma (Sandbox)", role_level: clearance }));
         onLoginSuccess();
       }
     });
@@ -112,11 +113,19 @@ const Login = ({ onLoginSuccess, onGoToRegister }) => {
             role_level: "LeadInvestigator",
             is_approved: true,
             secret_code: statusCheckCode,
-            user_id: "c270ac76-a880-4f3b-a975-14f002fd9c06"
+            user_id: "c270ac76-a880-4f3b-a975-14f002fd9c06",
+            username: "op_investigatorsha_9c1a",
+            generated_passphrase: "fns-pass-mock123"
           });
         }, 600);
       }
     });
+  };
+
+  const copyToClipboard = (text, field) => {
+    navigator.clipboard.writeText(text);
+    setCopiedField(field);
+    setTimeout(() => setCopiedField(null), 2000);
   };
 
   return (
@@ -180,17 +189,17 @@ const Login = ({ onLoginSuccess, onGoToRegister }) => {
               </select>
             </div>
 
-            {/* Agency Email */}
+            {/* Operator Username */}
             <div>
               <label className="text-[10px] font-bold uppercase tracking-wider text-muted block mb-1.5">
-                Agency Email Address
+                Operator Username
               </label>
               <input
-                type="email"
+                type="text"
                 required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="operator@agency.gov"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="e.g. investigator_sharma"
                 className="w-full bg-background border rounded-lg px-4 py-2.5 text-xs text-foreground placeholder-muted/50 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all font-mono"
               />
             </div>
@@ -217,22 +226,6 @@ const Login = ({ onLoginSuccess, onGoToRegister }) => {
                   {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
-            </div>
-
-            {/* Hardware Authenticator Code */}
-            <div>
-              <label className="text-[10px] font-bold uppercase tracking-wider text-muted block mb-1.5 flex items-center gap-1.5">
-                <Key size={12} className="text-accent" />
-                HSM Hardware Token Verification ID
-              </label>
-              <input
-                type="text"
-                required
-                value={hardwareToken}
-                onChange={(e) => setHardwareToken(e.target.value)}
-                placeholder="FNS-HW-XXXXX"
-                className="w-full bg-background border rounded-lg px-4 py-2.5 text-xs text-foreground placeholder-muted/50 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all font-mono text-accent"
-              />
             </div>
 
             {/* Legal Warning Notice */}
@@ -316,24 +309,54 @@ const Login = ({ onLoginSuccess, onGoToRegister }) => {
                     <span className="font-semibold text-foreground">{statusData.full_name}</span>
                   </div>
                   <div>
-                    <span className="text-[9px] text-muted font-bold uppercase block">Agency Email</span>
-                    <span className="font-mono text-foreground break-all">{statusData.email}</span>
-                  </div>
-                  <div>
                     <span className="text-[9px] text-muted font-bold uppercase block">Requested Clearance</span>
                     <span className="font-semibold text-foreground">{statusData.role_level}</span>
                   </div>
-                  <div>
-                    <span className="text-[9px] text-muted font-bold uppercase block">Generated Operator ID</span>
-                    <span className="font-mono text-xs text-primary font-semibold break-all">
-                      {statusData.is_approved ? statusData.user_id : "Generating after approval..."}
-                    </span>
-                  </div>
                 </div>
-                
-                {statusData.is_approved && (
-                  <div className="p-2.5 bg-success/5 border border-success/20 rounded-md text-[10px] text-success/90 leading-tight">
-                    <strong>ID Generation Completed:</strong> Your operator identity hash has been successfully registered. You may now perform a stability handshake using your credentials.
+
+                {statusData.is_approved ? (
+                  <div className="border-t pt-3 mt-1 space-y-2.5">
+                    <span className="text-[10px] text-success font-bold uppercase tracking-wider block">Generated Credentials:</span>
+                    
+                    <div className="space-y-2 bg-card/60 rounded-lg p-2.5 border text-xs">
+                      {/* Generated Username */}
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <span className="text-[8px] font-bold text-muted block uppercase">ASSIGNED USERNAME</span>
+                          <span className="font-mono text-foreground font-semibold">{statusData.username}</span>
+                        </div>
+                        <button 
+                          type="button"
+                          onClick={() => copyToClipboard(statusData.username, 'user')}
+                          className="text-muted hover:text-foreground transition-colors p-1"
+                        >
+                          {copiedField === 'user' ? <span className="text-[9px] text-success font-bold">Copied!</span> : <Copy size={14} />}
+                        </button>
+                      </div>
+
+                      {/* Generated Passphrase */}
+                      <div className="flex justify-between items-center border-t pt-2">
+                        <div>
+                          <span className="text-[8px] font-bold text-muted block uppercase">FORENSIC PASSPHRASE</span>
+                          <span className="font-mono text-foreground font-semibold text-primary">{statusData.generated_passphrase}</span>
+                        </div>
+                        <button 
+                          type="button"
+                          onClick={() => copyToClipboard(statusData.generated_passphrase, 'pass')}
+                          className="text-muted hover:text-foreground transition-colors p-1"
+                        >
+                          {copiedField === 'pass' ? <span className="text-[9px] text-success font-bold">Copied!</span> : <Copy size={14} />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="p-2 bg-success/5 border border-success/20 rounded-md text-[9px] text-success/90 leading-tight">
+                      <strong>Handshake Complete:</strong> Copy these credentials and select your role clearance level to enter the secure workbench.
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-2.5 bg-warning/5 border border-warning/20 rounded-md text-[10px] text-warning/90 leading-relaxed">
+                    <strong>Pending Review:</strong> The system administrator is verifying your agency credentials. Your Username and Forensic Passphrase will be generated upon approval.
                   </div>
                 )}
               </div>

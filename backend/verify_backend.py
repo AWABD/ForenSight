@@ -48,6 +48,7 @@ def run_tests():
         "email": "sysadmin@agency.gov",
         "full_name": "System Admin operator",
         "role_level": "SysAdmin",
+        "username": "admin_root",
         "password": "sysadminsecret"
     }
     
@@ -55,6 +56,7 @@ def run_tests():
         "email": "sharma.forensics@agency.gov",
         "full_name": "Lead Investigator Dr. Sharma",
         "role_level": "LeadInvestigator",
+        "username": "investigator_sharma",
         "password": "leadsecretpass"
     }
 
@@ -62,6 +64,7 @@ def run_tests():
         "email": "analyst@agency.gov",
         "full_name": "Analyst Connor",
         "role_level": "Analyst",
+        "username": "analyst_connor",
         "password": "analystsecret"
     }
 
@@ -69,38 +72,91 @@ def run_tests():
         "email": "auditor@agency.gov",
         "full_name": "Auditor Legal",
         "role_level": "LegalAuditor",
+        "username": "auditor_legal",
         "password": "auditorsecret"
     }
 
     # Test Registration
     for payload in [sysadmin_payload, lead_payload, analyst_payload, auditor_payload]:
-        response = client.post("/api/v1/auth/register", json=payload)
+        # password is not strictly required at register, but sent for backwards-compatibility checks
+        response = client.post("/api/v1/auth/register", json={
+            "email": payload["email"],
+            "full_name": payload["full_name"],
+            "role_level": payload["role_level"]
+        })
         assert response.status_code == 201, f"Reg failed: {response.json()}"
-        print(f"[+] Successfully registered user: {payload['email']} ({payload['role_level']})")
+        print(f"[+] Successfully registered user request: {payload['email']} ({payload['role_level']})")
 
-    # Manually approve test users in database so they can log in
+    # Manually approve test users in database so they can log in, setting their specific usernames/passwords
     from sqlalchemy import text
+    from app.services.auth_service import get_password_hash
     with engine.begin() as conn:
-        conn.execute(text("UPDATE users SET is_approved = TRUE"))
-    print("[+] Test users approved for verification login tests.")
+        conn.execute(text(
+            "UPDATE users SET is_approved = TRUE, "
+            "username = 'admin_root', "
+            "generated_passphrase = 'sysadminsecret', "
+            "password_hash = :hash "
+            "WHERE email = 'sysadmin@agency.gov'"
+        ), {"hash": get_password_hash("sysadminsecret")})
+        
+        conn.execute(text(
+            "UPDATE users SET is_approved = TRUE, "
+            "username = 'investigator_sharma', "
+            "generated_passphrase = 'leadsecretpass', "
+            "password_hash = :hash "
+            "WHERE email = 'sharma.forensics@agency.gov'"
+        ), {"hash": get_password_hash("leadsecretpass")})
+        
+        conn.execute(text(
+            "UPDATE users SET is_approved = TRUE, "
+            "username = 'analyst_connor', "
+            "generated_passphrase = 'analystsecret', "
+            "password_hash = :hash "
+            "WHERE email = 'analyst@agency.gov'"
+        ), {"hash": get_password_hash("analystsecret")})
+        
+        conn.execute(text(
+            "UPDATE users SET is_approved = TRUE, "
+            "username = 'auditor_legal', "
+            "generated_passphrase = 'auditorsecret', "
+            "password_hash = :hash "
+            "WHERE email = 'auditor@agency.gov'"
+        ), {"hash": get_password_hash("auditorsecret")})
+    print("[+] Test users approved and credentials mapped for login verification.")
+
+    # Test strict clearance role level crossing constraint (Level 1 LegalAuditor cannot log in as Level 2 Analyst)
+    mismatch_payload = {
+        "username": "auditor_legal",
+        "password": "auditorsecret",
+        "selected_role": "Analyst"
+    }
+    mismatch_response = client.post("/api/v1/auth/login", json=mismatch_payload)
+    assert mismatch_response.status_code == 401, f"Expected 401 mismatch error, got: {mismatch_response.json()}"
+    print("[+] Checked clearance boundary: Level 1 user blocked from logging in as Level 2 Analyst.")
+
+    # Clear rate limiter to avoid rate limit exceptions on subsequent login runs
+    from app.services.rate_limiter import limiter
+    limiter._requests.clear()
+    print("[+] Rate limiter state cleared for main test run.")
 
     # Test Login & Token Generation (verifying JWT and Refresh Tokens)
     tokens = {}
     refresh_tokens = {}
     for payload in [sysadmin_payload, lead_payload, analyst_payload, auditor_payload]:
         login_payload = {
-            "email": payload["email"],
-            "password": payload["password"]
+            "username": payload["username"],
+            "password": payload["password"],
+            "selected_role": payload["role_level"]
         }
         response = client.post("/api/v1/auth/login", json=login_payload)
-        assert response.status_code == 200, f"Login failed: {response.json()}"
+        assert response.status_code == 200, f"Login failed for {payload['username']}: {response.json()}"
         data = response.json()
         assert "access_token" in data
         assert "refresh_token" in data
-        assert data["user"]["email"] == payload["email"]
+        assert data["user"]["username"] == payload["username"]
         tokens[payload["role_level"]] = data["access_token"]
         refresh_tokens[payload["role_level"]] = data["refresh_token"]
-        print(f"[+] Successfully logged in: {payload['email']}. Access & Refresh tokens generated.")
+        print(f"[+] Successfully logged in username: {payload['username']}. Access & Refresh tokens generated.")
 
     # Setup auth headers
     sysadmin_headers = {"Authorization": f"Bearer {tokens['SysAdmin']}"}
@@ -142,8 +198,9 @@ def run_tests():
 
     # Re-login Lead Investigator to acquire a valid session token for subsequent tests
     response = client.post("/api/v1/auth/login", json={
-        "email": lead_payload["email"],
-        "password": lead_payload["password"]
+        "username": lead_payload["username"],
+        "password": lead_payload["password"],
+        "selected_role": lead_payload["role_level"]
     })
     lead_headers = {"Authorization": f"Bearer {response.json()['access_token']}"}
     print("[+] Re-established Lead Investigator session.")
@@ -154,8 +211,9 @@ def run_tests():
     rate_limit_triggered = False
     for i in range(10):
         response = client.post("/api/v1/auth/login", json={
-            "email": "sharma.forensics@agency.gov",
-            "password": "incorrectpassword"
+            "username": "investigator_sharma",
+            "password": "incorrectpassword",
+            "selected_role": "LeadInvestigator"
         })
         if response.status_code == 429:
             rate_limit_triggered = True

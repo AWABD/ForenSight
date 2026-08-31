@@ -25,8 +25,7 @@ const Register = ({ onGoToLogin }) => {
       body: JSON.stringify({
         email,
         full_name: fullName,
-        role_level: clearance,
-        password: "analystsecret" // Default registration password for sandbox testing
+        role_level: clearance
       })
     })
     .then(async (res) => {

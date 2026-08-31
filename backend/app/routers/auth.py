@@ -29,15 +29,16 @@ def register_user(user_in: UserCreate, db: Session = Depends(get_db)):
     Registers a new examiner or operator on the system.
     Enforces a strict 5 requests/minute rate limit.
     """
-    existing_user = db.query(User).filter(User.email == user_in.email).first()
-    if existing_user:
-        logger.warning(f"Registration failure: email '{user_in.email}' is already registered")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered"
-        )
+    if user_in.email:
+        existing_user = db.query(User).filter(User.email == user_in.email).first()
+        if existing_user:
+            logger.warning(f"Registration failure: email '{user_in.email}' is already registered")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already registered"
+            )
     
-    hashed_password = get_password_hash(user_in.password)
+    hashed_password = get_password_hash(user_in.password) if user_in.password else "PENDING_ADMIN_HASH"
     secret_code = f"FNS-REG-{secrets.token_hex(4).upper()}"
     new_user = User(
         email=user_in.email,
@@ -54,12 +55,12 @@ def register_user(user_in: UserCreate, db: Session = Depends(get_db)):
     
     AuditService.append_audit_event(
         db=db,
-        action_type=f"USER_REGISTRATION: {new_user.email} ({new_user.role_level})",
+        action_type=f"USER_REGISTRATION: {new_user.email or new_user.full_name} ({new_user.role_level})",
         operator_id=None,  # Not approved/logged in yet, set to None
         associated_item_id=new_user.id
     )
     
-    logger.info(f"Registered new user request: {new_user.email} with code: {secret_code}")
+    logger.info(f"Registered new user request: {new_user.email or new_user.full_name} with code: {secret_code}")
     return new_user
 
 @router.post("/login", response_model=Token, dependencies=[Depends(login_rate_limiter)])
@@ -68,25 +69,34 @@ def login(login_data: UserLogin, db: Session = Depends(get_db)):
     User login endpoint issuing short-lived access tokens and long-lived refresh tokens.
     Enforces rate limits to defend against brute-force attacks.
     """
-    user = db.query(User).filter(User.email == login_data.email).first()
+    user = db.query(User).filter(User.username == login_data.username).first()
     if not user or not verify_password(login_data.password, user.password_hash):
-        logger.warning(f"Failed login attempt for email: '{login_data.email}'")
+        logger.warning(f"Failed login attempt for username: '{login_data.username}'")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Check if selected clearance level matches operator's database role
+    if user.role_level != login_data.selected_role:
+        logger.warning(f"Clearance level mismatch: user '{user.username}' actual level '{user.role_level}' requested level '{login_data.selected_role}'")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Clearance level mismatch for this operator identity.",
             headers={"WWW-Authenticate": "Bearer"},
         )
     
     # Check if registration is approved by database administrator
     if not user.is_approved:
-        logger.warning(f"Login blocked: user '{user.email}' is not approved yet")
+        logger.warning(f"Login blocked: user '{user.username}' is not approved yet")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Clearance request pending database administrator approval."
         )
     
     # 1. Generate Access Token (short-lived, e.g. 15-30 minutes, using settings default)
-    access_token = create_access_token(data={"sub": user.email})
+    access_token = create_access_token(data={"sub": user.username})
     
     # 2. Generate Refresh Token (long-lived, cryptographically random string)
     plain_refresh_token = secrets.token_hex(32)
@@ -238,5 +248,7 @@ def check_registration_status(secret_code: str, db: Session = Depends(get_db)):
         role_level=user.role_level,
         is_approved=user.is_approved,
         secret_code=user.secret_code,
-        user_id=user.id if user.is_approved else None
+        user_id=user.id if user.is_approved else None,
+        username=user.username if user.is_approved else None,
+        generated_passphrase=user.generated_passphrase if user.is_approved else None
     )

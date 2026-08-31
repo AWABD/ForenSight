@@ -69,8 +69,8 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         logger.warning(f"Failed to decode JWT Token: {e}")
         raise credentials_exception
 
-    # Query the user from the database
-    user = db.query(User).filter(User.email == email).first()
+    # Query the user from the database (supporting both username and email as sub parameter)
+    user = db.query(User).filter((User.username == email) | (User.email == email)).first()
     if user is None:
         logger.warning(f"Authenticated user sub '{email}' not found in database")
         raise credentials_exception
