@@ -20,14 +20,16 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=F
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verifies that a plain text password matches its hash."""
     try:
-        return pwd_context.verify(plain_password, hashed_password)
+        safe_pass = plain_password[:72] if plain_password else ""
+        return pwd_context.verify(safe_pass, hashed_password)
     except Exception as e:
         logger.error(f"Password verification error: {e}")
         return False
 
 def get_password_hash(password: str) -> str:
     """Computes a bcrypt hash for a plain text password."""
-    return pwd_context.hash(password)
+    safe_pass = password[:72] if password else ""
+    return pwd_context.hash(safe_pass)
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     """Generates a secure HS256-encoded JWT token with a unique JTI (JWT ID)."""
