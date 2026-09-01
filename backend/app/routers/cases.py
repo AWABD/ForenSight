@@ -197,3 +197,31 @@ def update_case(
         evidence_count=stats["evidence_count"],
         anomaly_rate=stats["anomaly_rate"]
     )
+
+@router.delete("/{case_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_case(
+    case_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(RoleChecker(["SysAdmin"]))
+):
+    """
+    Deletes a forensic case (Strictly restricted to Level 4 - SysAdmin only).
+    """
+    case = db.query(Case).filter(Case.id == case_id).first()
+    if not case:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
+        
+    case_num = case.case_number
+    db.delete(case)
+    db.commit()
+    
+    # Audit log block entry
+    AuditService.append_audit_event(
+        db=db,
+        action_type=f"CASE_DELETED: {case_num}",
+        operator_id=current_user.id,
+        associated_item_id=case_id
+    )
+    
+    logger.info(f"Forensic case deleted. Case Number: {case_num}, Deleted By SysAdmin: {current_user.email}")
+    return None

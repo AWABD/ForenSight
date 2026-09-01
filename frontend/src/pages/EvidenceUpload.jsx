@@ -27,6 +27,11 @@ const EvidenceUpload = () => {
     setTargetCaseId(selectedCaseId);
   }, [selectedCaseId]);
 
+  // Read authenticated user role
+  const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+  const roleLevel = storedUser.role_level || 'LeadInvestigator';
+  const canUpload = roleLevel === 'SysAdmin' || roleLevel === 'LeadInvestigator';
+
   // Allowed extensions list
   const ALLOWED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.pdf', '.docx', '.txt', '.log', '.csv', '.eml', '.msg', '.zip'];
 

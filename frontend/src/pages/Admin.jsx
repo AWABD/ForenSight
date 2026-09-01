@@ -13,6 +13,11 @@ const Admin = () => {
   const [clearanceRequests, setClearanceRequests] = useState([]);
   const [loadingRequests, setLoadingRequests] = useState(false);
 
+  // Read current user role from local storage
+  const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+  const roleLevel = storedUser.role_level || 'LeadInvestigator';
+  const isSysAdmin = roleLevel === 'SysAdmin';
+
   const fetchRequests = () => {
     const token = localStorage.getItem('token');
     if (!token || token === 'mock-sandbox-token') {
@@ -115,6 +120,25 @@ const Admin = () => {
     { name: 'BERT Vect', memory: 850 },
     { name: 'Llama-3', memory: 6400 }
   ];
+
+  if (!isSysAdmin) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center p-4">
+        <div className="glassmorphism border border-danger/30 rounded-2xl p-8 max-w-lg w-full text-center space-y-4 shadow-2xl">
+          <div className="w-16 h-16 rounded-full bg-danger/20 text-danger mx-auto flex items-center justify-center ring-8 ring-danger/10">
+            <XCircle size={36} />
+          </div>
+          <h3 className="text-lg font-extrabold text-foreground tracking-tight">ACCESS RESTRICTED</h3>
+          <p className="text-xs text-muted leading-relaxed">
+            Your current clearance level (<strong className="text-foreground">{roleLevel}</strong>) does not grant authorization to inspect or manage operator filings, AI model telemetry, or system parameters.
+          </p>
+          <div className="p-3 bg-danger/10 border border-danger/20 rounded-lg text-[10px] text-danger font-mono font-bold uppercase tracking-wider">
+            SECURITY PROTOCOL: Level 4 System Administrator (SysAdmin) Clearance Required
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

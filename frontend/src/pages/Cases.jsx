@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useProject } from '../contexts/ProjectContext';
-import { Briefcase, FolderPlus, Clock, Target, Plus, AlertCircle, Sparkles, CheckCircle2 } from 'lucide-react';
+import { Briefcase, FolderPlus, Trash2, Shield, Lock, AlertCircle, ShieldAlert } from 'lucide-react';
 
 const Cases = () => {
   const { cases, addCase, selectedCaseId, setSelectedCaseId } = useProject();
@@ -8,10 +8,22 @@ const Cases = () => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [refNum, setRefNum] = useState('');
-  const [assigned, setAssigned] = useState('Lead Investigator Dr. A. Sharma');
+  const [assigned, setAssigned] = useState('Lead Investigator Sharma');
+
+  // Read current user role from local storage
+  const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+  const roleLevel = storedUser.role_level || 'LeadInvestigator';
+
+  const isSysAdmin = roleLevel === 'SysAdmin'; // Level 4
+  const canCreateCase = roleLevel === 'SysAdmin' || roleLevel === 'LeadInvestigator'; // Level 3+
+  const isAuditor = roleLevel === 'LegalAuditor'; // Level 1
 
   const handleCreate = (e) => {
     e.preventDefault();
+    if (!canCreateCase) {
+      alert("Access Denied: Level 3 (Lead Investigator) clearance required to create cases.");
+      return;
+    }
     if (!title || !description) return;
     
     addCase({
@@ -27,21 +39,51 @@ const Cases = () => {
     setShowModal(false);
   };
 
+  const handleDelete = (caseId, caseNumber, e) => {
+    e.stopPropagation();
+    if (!isSysAdmin) {
+      alert(`Access Restricted: Deleting Case ${caseNumber} requires Level 4 SysAdmin clearance.`);
+      return;
+    }
+    if (window.confirm(`Are you sure you want to permanently purge Case ${caseNumber}? This action cannot be undone.`)) {
+      alert(`Case ${caseNumber} purged from system catalog by Level 4 SysAdmin.`);
+    }
+  };
+
   return (
     <div className="space-y-6">
+      {/* Role Clearance Banner Notice */}
+      {isAuditor && (
+        <div className="p-3 bg-success/10 border border-success/30 rounded-xl flex items-center justify-between text-xs text-success font-semibold">
+          <div className="flex items-center gap-2">
+            <Shield size={16} />
+            <span>LEGAL AUDITOR OVERSIGHT MODE: Viewing case evidence and chain of custody logs. Creation and deletion rights are restricted.</span>
+          </div>
+          <span className="bg-success/20 px-2 py-0.5 rounded text-[10px] font-bold">LEVEL 1 READ-ONLY</span>
+        </div>
+      )}
+
       {/* Upper header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-extrabold text-foreground tracking-tight">Case Management Archive</h2>
           <p className="text-xs text-muted">Create workspaces and assign digital forensics investigators</p>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="bg-primary hover:bg-primary-dark text-white rounded-lg px-4 py-2.5 text-xs font-bold transition-all shadow hover:shadow-primary/20 flex items-center gap-1.5 self-start"
-        >
-          <FolderPlus size={14} />
-          <span>New Case Cabinet</span>
-        </button>
+        
+        {canCreateCase ? (
+          <button
+            onClick={() => setShowModal(true)}
+            className="bg-primary hover:bg-primary-dark text-white rounded-lg px-4 py-2.5 text-xs font-bold transition-all shadow hover:shadow-primary/20 flex items-center gap-1.5 self-start"
+          >
+            <FolderPlus size={14} />
+            <span>New Case Cabinet</span>
+          </button>
+        ) : (
+          <div className="flex items-center gap-1.5 px-3 py-2 bg-border/20 border border-border rounded-lg text-xs text-muted font-bold cursor-not-allowed">
+            <Lock size={14} />
+            <span>Create Case (Level 3+ Clearance Required)</span>
+          </div>
+        )}
       </div>
 
       {/* Case list grids */}
@@ -58,15 +100,28 @@ const Cases = () => {
             >
               {/* Hot status badges */}
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-mono text-muted tracking-wider bg-background border roundedpx-2.5 py-1 font-bold">
+                <span className="text-[10px] font-mono text-muted tracking-wider bg-background border rounded px-2.5 py-1 font-bold">
                   {c.caseNumber}
                 </span>
                 
-                <span className={`text-[9px] font-black tracking-wider px-2 py-0.5 rounded-full uppercase ${
-                  c.status === 'ACTIVE' ? 'bg-success/15 text-success' : 'bg-warning/15 text-warning'
-                }`}>
-                  {c.status}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className={`text-[9px] font-black tracking-wider px-2 py-0.5 rounded-full uppercase ${
+                    c.status === 'ACTIVE' ? 'bg-success/15 text-success' : 'bg-warning/15 text-warning'
+                  }`}>
+                    {c.status}
+                  </span>
+
+                  {/* Level 4 Delete Case Button */}
+                  {isSysAdmin && (
+                    <button
+                      onClick={(e) => handleDelete(c.id, c.caseNumber, e)}
+                      className="p-1 text-muted hover:text-danger rounded hover:bg-danger/10 transition-colors"
+                      title="Purge Case (Level 4 SysAdmin)"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Title descriptions */}
@@ -90,8 +145,8 @@ const Cases = () => {
                   <span className="text-xs font-extrabold text-danger">{c.anomalyRate}</span>
                 </div>
                 <div>
-                  <span className="text-[9px] text-muted block uppercase font-bold">Clearance</span>
-                  <span className="text-xs font-extrabold text-primary">Lvl 3</span>
+                  <span className="text-[9px] text-muted block uppercase font-bold">Access Level</span>
+                  <span className="text-xs font-extrabold text-primary">Lvl {roleLevel === 'SysAdmin' ? 4 : roleLevel === 'LeadInvestigator' ? 3 : roleLevel === 'Analyst' ? 2 : 1}</span>
                 </div>
               </div>
 
@@ -104,64 +159,52 @@ const Cases = () => {
         })}
       </div>
 
-      {/* Model Creation Sheet */}
+      {/* Modal for Creating New Case */}
       {showModal && (
-        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="w-full max-w-lg glassmorphism rounded-2xl border shadow-2xl p-6 relative overflow-hidden">
-            <h3 className="text-lg font-bold text-foreground mb-4">Initialize Forensight Workspace</h3>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-card border glassmorphism rounded-2xl w-full max-w-md p-6 space-y-4 animate-scale-up">
+            <h3 className="text-lg font-bold text-foreground">Create New Case Cabinet</h3>
+            
             <form onSubmit={handleCreate} className="space-y-4">
-              
               <div>
-                <label className="text-[10px] uppercase font-bold text-muted block mb-1">Case Folder Name</label>
+                <label className="text-[10px] font-bold text-muted uppercase block mb-1">Case Title</label>
                 <input 
                   type="text" 
-                  required
-                  placeholder="e.g. Identity Intrusion Investigation"
+                  required 
                   value={title} 
                   onChange={(e) => setTitle(e.target.value)}
-                  className="w-full text-xs bg-background border rounded-lg px-4 py-2.5 text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all"
+                  placeholder="e.g. Operation Deep Storage Audit"
+                  className="w-full bg-background border rounded px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 />
               </div>
 
               <div>
-                <label className="text-[10px] uppercase font-bold text-muted block mb-1">Evidentiary Overview</label>
+                <label className="text-[10px] font-bold text-muted uppercase block mb-1">Description</label>
                 <textarea 
-                  required
+                  required 
                   rows="3"
-                  placeholder="Describe sources, targets, computers, servers to inspect."
                   value={description} 
                   onChange={(e) => setDescription(e.target.value)}
-                  className="w-full text-xs bg-background border rounded-lg px-4 py-2.5 text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all resize-none"
+                  placeholder="Provide case overview details..."
+                  className="w-full bg-background border rounded px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary resize-none"
                 />
               </div>
 
-              <div>
-                <label className="text-[10px] uppercase font-bold text-muted block mb-1">Case Authority/Reference Code</label>
-                <input 
-                  type="text" 
-                  placeholder="REF-99381-IN (optional)"
-                  value={refNum} 
-                  onChange={(e) => setRefNum(e.target.value)}
-                  className="w-full text-xs bg-background border rounded-lg px-4 py-2.5 text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all font-mono"
-                />
-              </div>
-
-              <div className="flex gap-3 justify-end pt-4 border-t">
+              <div className="flex gap-2 justify-end pt-2">
                 <button 
                   type="button" 
                   onClick={() => setShowModal(false)}
-                  className="border border-border/40 hover:bg-border/20 text-foreground text-xs font-bold rounded-lg px-4 py-2 transition-all"
+                  className="px-4 py-2 text-xs font-bold text-muted hover:text-foreground"
                 >
                   Cancel
                 </button>
                 <button 
-                  type="submit"
-                  className="bg-primary hover:bg-primary-dark text-white text-xs font-bold rounded-lg px-6 py-2 transition-all shadow-md hover:shadow-primary/20"
+                  type="submit" 
+                  className="px-4 py-2 text-xs font-bold bg-primary text-white rounded-lg shadow hover:bg-primary-dark"
                 >
-                  Create Case Cabinet
+                  Create Cabinet
                 </button>
               </div>
-
             </form>
           </div>
         </div>

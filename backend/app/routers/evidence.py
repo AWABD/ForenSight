@@ -232,3 +232,36 @@ def get_ocr_records(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evidence file not found")
         
     return db.query(OCRText).filter(OCRText.evidence_id == evidence_id).all()
+
+@router.delete("/{evidence_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_evidence(
+    case_id: str,
+    evidence_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(RoleChecker(["SysAdmin"]))
+):
+    """
+    Deletes an evidence file (Strictly restricted to Level 4 - SysAdmin only).
+    """
+    evidence = db.query(EvidenceFile).filter(
+        EvidenceFile.case_id == case_id,
+        EvidenceFile.id == evidence_id
+    ).first()
+    
+    if not evidence:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evidence file not found")
+        
+    file_name = evidence.file_name
+    db.delete(evidence)
+    db.commit()
+    
+    # Audit log block entry
+    AuditService.append_audit_event(
+        db=db,
+        action_type=f"EVIDENCE_DELETED: {file_name}",
+        operator_id=current_user.id,
+        associated_item_id=evidence_id
+    )
+    
+    logger.info(f"Evidence file deleted. File: {file_name}, Deleted By SysAdmin: {current_user.email}")
+    return None

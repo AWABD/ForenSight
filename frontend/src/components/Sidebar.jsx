@@ -10,30 +10,74 @@ import {
   Search, 
   BrainCircuit, 
   FileText, 
-  TrendingUp, 
   UserCheck, 
   Sun, 
   Moon, 
   LogOut,
   FolderOpen,
-  Fingerprint
+  Fingerprint,
+  Shield,
+  ShieldCheck,
+  Eye,
+  Lock
 } from 'lucide-react';
 
 const Sidebar = ({ currentTab, setCurrentTab }) => {
   const { darkMode, toggleTheme } = useTheme();
   const { cases, selectedCaseId, setSelectedCaseId } = useProject();
 
+  // Retrieve authenticated user profile from local storage
+  const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+  const roleLevel = storedUser.role_level || 'LeadInvestigator';
+  const fullName = storedUser.full_name || 'Operator';
+  const username = storedUser.username || 'user';
+
+  // Role metadata design system
+  const roleConfig = {
+    SysAdmin: {
+      title: 'Level 4 - SysAdmin',
+      shortTitle: 'SysAdmin Root',
+      badgeClass: 'bg-danger/20 text-danger border-danger/40',
+      icon: Shield,
+      color: 'text-danger'
+    },
+    LeadInvestigator: {
+      title: 'Level 3 - Lead Examiner',
+      shortTitle: 'Lead Examiner',
+      badgeClass: 'bg-primary/20 text-primary border-primary/40',
+      icon: ShieldCheck,
+      color: 'text-primary'
+    },
+    Analyst: {
+      title: 'Level 2 - Forensic Analyst',
+      shortTitle: 'Analyst',
+      badgeClass: 'bg-warning/20 text-warning border-warning/40',
+      icon: Eye,
+      color: 'text-warning'
+    },
+    LegalAuditor: {
+      title: 'Level 1 - Legal Auditor',
+      shortTitle: 'Legal Auditor',
+      badgeClass: 'bg-success/20 text-success border-success/40',
+      icon: FileText,
+      color: 'text-success'
+    }
+  };
+
+  const currentRoleInfo = roleConfig[roleLevel] || roleConfig.LeadInvestigator;
+  const RoleIcon = currentRoleInfo.icon;
+
   const menuItems = [
     { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard },
     { id: 'cases', name: 'Case Management', icon: Briefcase },
-    { id: 'upload', name: 'Evidence Upload', icon: FolderSync },
+    { id: 'upload', name: 'Evidence Upload', icon: FolderSync, restricted: roleLevel === 'Analyst' || roleLevel === 'LegalAuditor' },
     { id: 'viewer', name: 'Evidence Viewer', icon: FolderOpen },
     { id: 'timeline', name: 'Temporal Timeline', icon: History },
     { id: 'graph', name: 'Relationship Graph', icon: Network },
     { id: 'search', name: 'Semantic Search', icon: Search },
     { id: 'ai', name: 'AI Explainability', icon: BrainCircuit },
     { id: 'report', name: 'Report Manager', icon: FileText },
-    { id: 'admin', name: 'Admin Console', icon: UserCheck }
+    { id: 'admin', name: 'Admin Console', icon: UserCheck, sysAdminOnly: true }
   ];
 
   return (
@@ -49,9 +93,19 @@ const Sidebar = ({ currentTab, setCurrentTab }) => {
         </div>
       </div>
 
-      {/* Active Cabinet Case Selector */}
+      {/* Active Clearance Level Badge */}
+      <div className="px-4 py-2 bg-border/10 border-b flex items-center justify-between">
+        <div className="flex items-center gap-1.5">
+          <RoleIcon size={14} className={currentRoleInfo.color} />
+          <span className="text-[10px] font-mono font-extrabold uppercase tracking-wider text-foreground">
+            {currentRoleInfo.title}
+          </span>
+        </div>
+      </div>
+
+      {/* Active Case Selector */}
       <div className="p-4 border-b">
-        <label className="text-[10px] uppercase font-bold tracking-wider text-muted block mb-2">Active Case</label>
+        <label className="text-[10px] uppercase font-bold tracking-wider text-muted block mb-2">Active Case Workspace</label>
         <select 
           value={selectedCaseId} 
           onChange={(e) => setSelectedCaseId(e.target.value)}
@@ -70,19 +124,31 @@ const Sidebar = ({ currentTab, setCurrentTab }) => {
         {menuItems.map((item) => {
           const Icon = item.icon;
           const isActive = currentTab === item.id;
+          const isLocked = item.sysAdminOnly && roleLevel !== 'SysAdmin';
+
           return (
             <button
               key={item.id}
-              onClick={() => setCurrentTab(item.id)}
+              onClick={() => {
+                if (isLocked) {
+                  alert(`Access Denied: ${item.name} requires Level 4 SysAdmin clearance.`);
+                  return;
+                }
+                setCurrentTab(item.id);
+              }}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
                 isActive 
                   ? 'bg-primary text-white shadow-md shadow-primary/20 dark:bg-primary dark:text-white dark:shadow-md dark:shadow-primary/10' 
+                  : isLocked
+                  ? 'opacity-40 text-muted cursor-not-allowed hover:bg-transparent'
                   : 'text-muted hover:bg-border/30 hover:text-foreground'
               }`}
             >
               <Icon size={16} />
               <span>{item.name}</span>
-              {isActive && (
+              {isLocked ? (
+                <Lock size={12} className="ml-auto text-muted" />
+              ) : isActive && (
                 <div className="ml-auto w-1.5 h-1.5 rounded-full bg-white animate-ping" />
               )}
             </button>
@@ -106,17 +172,23 @@ const Sidebar = ({ currentTab, setCurrentTab }) => {
           </div>
         </button>
 
-        {/* User Card */}
-        <div className="flex items-center gap-3 p-2 rounded-lg bg-border/20 border border-border/30">
-          <div className="w-8 h-8 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold text-xs ring-1 ring-primary/20">
-            AS
+        {/* User Profile Card */}
+        <div className="flex items-center gap-3 p-2.5 rounded-lg bg-border/20 border border-border/30">
+          <div className={`w-8 h-8 rounded-full border flex items-center justify-center font-bold text-xs ${currentRoleInfo.badgeClass}`}>
+            {username.substring(0, 2).toUpperCase()}
           </div>
           <div className="overflow-hidden">
-            <h4 className="text-xs font-bold truncate text-foreground">Dr. A. Sharma</h4>
-            <span className="text-[9px] uppercase tracking-wider text-muted font-bold block">Lead Examiner</span>
+            <h4 className="text-xs font-bold truncate text-foreground">{fullName}</h4>
+            <span className={`text-[9px] uppercase tracking-wider font-extrabold block ${currentRoleInfo.color}`}>
+              {currentRoleInfo.shortTitle}
+            </span>
           </div>
           <button 
-            onClick={() => setCurrentTab('login')} 
+            onClick={() => {
+              localStorage.removeItem('token');
+              localStorage.removeItem('user');
+              setCurrentTab('login');
+            }} 
             className="ml-auto p-1.5 text-muted hover:text-danger rounded-md hover:bg-danger/10 transition-colors"
             title="Log Out"
           >
