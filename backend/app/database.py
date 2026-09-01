@@ -102,6 +102,79 @@ def migrate_database(db_engine):
                     "created": datetime.utcnow()
                 })
 
+        # 3. Pre-seed Default Cases & Evidence Files if database is empty
+        case_check = conn.execute(text("SELECT id FROM cases LIMIT 1")).fetchone()
+        if not case_check:
+            sysadmin_user = conn.execute(text("SELECT id FROM users WHERE role_level='SysAdmin' LIMIT 1")).fetchone()
+            admin_id = sysadmin_user[0] if sysadmin_user else str(uuid.uuid4())
+            
+            c1_id = str(uuid.uuid4())
+            c2_id = str(uuid.uuid4())
+            
+            conn.execute(text(
+                "INSERT INTO cases (id, case_number, title, description, status, reference_number, assigned_to_id, created_at) "
+                "VALUES (:id, :cnum, :title, :desc, 'ACTIVE', :ref, :aid, :created)"
+            ), {
+                "id": c1_id,
+                "cnum": "FS-2026-091",
+                "title": "Financial Embezzlement & Wire Fraud",
+                "desc": "Corporate financial forensic audit regarding unapproved transactions from the staging deployment portal.",
+                "ref": "REF-83893-IND",
+                "aid": admin_id,
+                "created": datetime.utcnow()
+            })
+            
+            conn.execute(text(
+                "INSERT INTO cases (id, case_number, title, description, status, reference_number, assigned_to_id, created_at) "
+                "VALUES (:id, :cnum, :title, :desc, 'ACTIVE', :ref, :aid, :created)"
+            ), {
+                "id": c2_id,
+                "cnum": "FS-2026-104",
+                "title": "Deepfake Tampering & IP Theft",
+                "desc": "Investigation of manipulated verification records, compromised source systems, and EXIF spoofing vectors.",
+                "ref": "REF-92384-US",
+                "aid": admin_id,
+                "created": datetime.utcnow()
+            })
+
+            # Seed evidence files with anomaly tags
+            evidence_seeds = [
+                (c1_id, "db_ledger_dump.sqlite", 42100000, "Database", "f8c3c4d1de0ba3f1a0e1c6b54a8e2bc70c67feaa11223344", "f8c3c4d1de0ba3f1a0e1c6b54a8e2bc70c67feaa11223344", [
+                    {"type": "METADATA_SPOOFING", "severity": "HIGH", "message": "12 database rows deleted on 2026-07-28 08:14:10 UTC"}
+                ]),
+                (c1_id, "auth_syslog.log", 1240000, "System Log", "a9c3c4d1de0ba3f1a0e1c6b54a8e2bc70c67feaa55667788", "a9c3c4d1de0ba3f1a0e1c6b54a8e2bc70c67feaa55667788", [
+                    {"type": "ACCESS_VIOLATION_LOGS", "severity": "CRITICAL", "message": "Brute-force signature: 142 failed log-in requests from IP 192.168.12.93 in 2 minutes"}
+                ]),
+                (c2_id, "employee_record_tampered.jpg", 852000, "Image Scan", "b7c3c4d1de0ba3f1a0e1c6b54a8e2bc70c67feaa99001122", "b7c3c4d1de0ba3f1a0e1c6b54a8e2bc70c67feaa99001122", [
+                    {"type": "METADATA_SPOOFING", "severity": "HIGH", "message": "EXIF timestamps set 6 years retroactively. File creation date discrepancy."},
+                    {"type": "DEEPFAKE_MEDIA", "severity": "CRITICAL", "message": "Double-quantization matrix deviation maps identify clone-stamp modification"}
+                ]),
+                (c2_id, "ceo_audio_statement.mp3", 12400000, "Audio Recording", "c8c3c4d1de0ba3f1a0e1c6b54a8e2bc70c67feaa33445566", "c8c3c4d1de0ba3f1a0e1c6b54a8e2bc70c67feaa33445566", [
+                    {"type": "DEEPFAKE_MEDIA", "severity": "CRITICAL", "message": "Spectral analysis tags: 98% synthetic voice match with GAN audio generator signature."}
+                ]),
+                (c2_id, "source_repository_logs.csv", 4500000, "Audit Log", "d9c3c4d1de0ba3f1a0e1c6b54a8e2bc70c67feaa77889900", "d9c3c4d1de0ba3f1a0e1c6b54a8e2bc70c67feaa77889900", [
+                    {"type": "ACCESS_VIOLATION_LOGS", "severity": "WARNING", "message": "Token bypass credentials used on repo path `/security/kms`"}
+                ])
+            ]
+
+            import json
+            for cid, fname, fsize, ftype, h256, h3, anomalies in evidence_seeds:
+                conn.execute(text(
+                    "INSERT INTO evidence_files (id, case_id, file_name, file_size_bytes, file_type, sha256_hash, sha3_hash, storage_vault_key, anomalies, ingested_at) "
+                    "VALUES (:id, :cid, :fname, :fsize, :ftype, :h256, :h3, :key, :anom, :created)"
+                ), {
+                    "id": str(uuid.uuid4()),
+                    "cid": cid,
+                    "fname": fname,
+                    "fsize": fsize,
+                    "ftype": ftype,
+                    "h256": h256,
+                    "h3": h3,
+                    "key": fname,
+                    "anom": json.dumps(anomalies) if is_postgres else anomalies,
+                    "created": datetime.utcnow()
+                })
+
 def get_db():
     """
     Database session dependency yield provider.

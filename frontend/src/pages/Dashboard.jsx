@@ -304,7 +304,9 @@ const Dashboard = ({ setCurrentTab }) => {
             </ResponsiveContainer>
             <div className="absolute text-center">
               <span className="text-[10px] uppercase font-bold text-muted block">Alert Ratio</span>
-              <span className="text-lg font-black text-danger">{activeCase.anomalyRate}</span>
+              <span className="text-lg font-black text-danger">
+                {caseEvidence.length > 0 ? `${Math.round((caseEvidence.filter(e => e.anomalies && e.anomalies.length > 0).length / caseEvidence.length) * 100)}%` : activeCase.anomalyRate || '0%'}
+              </span>
             </div>
           </div>
           

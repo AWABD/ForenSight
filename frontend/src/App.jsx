@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { ProjectProvider } from './contexts/ProjectContext';
 import Sidebar from './components/Sidebar';
@@ -14,18 +14,84 @@ import Search from './pages/Search';
 import AISummary from './pages/AISummary';
 import ReportViewer from './pages/ReportViewer';
 import Admin from './pages/Admin';
+import { AlertCircle } from 'lucide-react';
 
 const AppContent = () => {
   const { darkMode } = useTheme();
-  const [currentTab, setCurrentTab] = useState('login'); // Start in login portal
+  const [currentTab, setCurrentTab] = useState('login'); // Always start in login portal
+  const [sessionExpiredNotice, setSessionExpiredNotice] = useState(false);
+  const timerRef = useRef(null);
+
+  // 1. Force Logout on Browser Refresh (F5 / Page Reload)
+  useEffect(() => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    setCurrentTab('login');
+  }, []);
+
+  // 2. 5-Minute Inactivity Auto-Logout Handler
+  const resetInactivityTimer = () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+
+    // Only set inactivity timer if user is currently logged into the app
+    if (currentTab !== 'login' && currentTab !== 'register') {
+      const INACTIVITY_LIMIT_MS = 5 * 60 * 1000; // 5 minutes
+      timerRef.current = setTimeout(() => {
+        // Auto-logout user after 5 minutes of inactivity
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        setSessionExpiredNotice(true);
+        setCurrentTab('login');
+      }, INACTIVITY_LIMIT_MS);
+    }
+  };
+
+  useEffect(() => {
+    // User interaction activity events
+    const activityEvents = ['mousemove', 'keydown', 'mousedown', 'scroll', 'touchstart'];
+    
+    // Register activity listeners
+    activityEvents.forEach(event => {
+      window.addEventListener(event, resetInactivityTimer);
+    });
+
+    // Start timer on tab change
+    resetInactivityTimer();
+
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      activityEvents.forEach(event => {
+        window.removeEventListener(event, resetInactivityTimer);
+      });
+    };
+  }, [currentTab]);
 
   // If login or register, bypass sidebar layout wrapper
   if (currentTab === 'login') {
     return (
-      <Login 
-        onLoginSuccess={() => setCurrentTab('dashboard')} 
-        onGoToRegister={() => setCurrentTab('register')} 
-      />
+      <div className="relative">
+        {sessionExpiredNotice && (
+          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-danger/90 text-white px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3 border border-white/20 animate-shake">
+            <AlertCircle size={20} />
+            <span className="text-xs font-extrabold tracking-wide">
+              SESSION EXPIRED: Automatically logged out due to 5 minutes of inactivity. Please log in again.
+            </span>
+            <button 
+              onClick={() => setSessionExpiredNotice(false)} 
+              className="ml-4 font-black hover:opacity-80 text-xs bg-black/20 px-2 py-1 rounded"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+        <Login 
+          onLoginSuccess={() => {
+            setSessionExpiredNotice(false);
+            setCurrentTab('dashboard');
+          }} 
+          onGoToRegister={() => setCurrentTab('register')} 
+        />
+      </div>
     );
   }
 
