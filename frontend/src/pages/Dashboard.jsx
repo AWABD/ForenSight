@@ -45,11 +45,65 @@ const Dashboard = ({ setCurrentTab }) => {
     { name: 'Sun', volume: 280 }
   ];
 
-  const dataAITypes = [
-    { name: 'Metadata Spoofing', value: 40, color: '#3b82f6' },
-    { name: 'Deepfake Media', value: 35, color: '#b91c1c' },
-    { name: 'Access Violation Logs', value: 25, color: '#f59e0b' }
-  ];
+  // Dynamic Threat Type calculation from active case evidence anomalies
+  const computeThreatDistribution = () => {
+    let metadataCount = 0;
+    let deepfakeCount = 0;
+    let accessViolationCount = 0;
+    let systemAnomaliesCount = 0;
+
+    caseEvidence.forEach(file => {
+      if (file.anomalies && Array.isArray(file.anomalies)) {
+        file.anomalies.forEach(anomaly => {
+          const type = (anomaly.type || '').toUpperCase();
+          const msg = (anomaly.message || '').toLowerCase();
+          
+          if (type.includes('METADATA') || type.includes('EXIF') || msg.includes('timestamp') || msg.includes('exif')) {
+            metadataCount += 1;
+          } else if (type.includes('DEEPFAKE') || type.includes('FORGERY') || type.includes('IMAGE') || type.includes('AUDIO') || msg.includes('synthetic')) {
+            deepfakeCount += 1;
+          } else if (type.includes('ACCESS') || type.includes('LOG') || type.includes('LOGIN') || type.includes('SHEBANG') || msg.includes('unauthorized') || msg.includes('brute')) {
+            accessViolationCount += 1;
+          } else {
+            systemAnomaliesCount += 1;
+          }
+        });
+      }
+    });
+
+    const totalAnomalies = metadataCount + deepfakeCount + accessViolationCount + systemAnomaliesCount;
+
+    if (totalAnomalies === 0) {
+      // Baseline threat distribution ratio
+      return [
+        { name: 'Metadata Spoofing', value: 40, percentage: '40%', color: '#3b82f6' },
+        { name: 'Deepfake Media', value: 35, percentage: '35%', color: '#ef4444' },
+        { name: 'Access Violation Logs', value: 25, percentage: '25%', color: '#f59e0b' }
+      ];
+    }
+
+    const res = [];
+    if (metadataCount > 0) {
+      const pct = Math.round((metadataCount / totalAnomalies) * 100);
+      res.push({ name: 'Metadata Spoofing', value: metadataCount, percentage: `${pct}%`, color: '#3b82f6' });
+    }
+    if (deepfakeCount > 0) {
+      const pct = Math.round((deepfakeCount / totalAnomalies) * 100);
+      res.push({ name: 'Deepfake Media', value: deepfakeCount, percentage: `${pct}%`, color: '#ef4444' });
+    }
+    if (accessViolationCount > 0) {
+      const pct = Math.round((accessViolationCount / totalAnomalies) * 100);
+      res.push({ name: 'Access Violation Logs', value: accessViolationCount, percentage: `${pct}%`, color: '#f59e0b' });
+    }
+    if (systemAnomaliesCount > 0) {
+      const pct = Math.round((systemAnomaliesCount / totalAnomalies) * 100);
+      res.push({ name: 'System Security Alerts', value: systemAnomaliesCount, percentage: `${pct}%`, color: '#10b981' });
+    }
+
+    return res;
+  };
+
+  const dataAITypes = computeThreatDistribution();
 
   const verifyLedgerIntegrity = () => {
     setVerifyingLedger(true);
@@ -262,7 +316,7 @@ const Dashboard = ({ setCurrentTab }) => {
                   <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
                   <span className="text-muted">{item.name}</span>
                 </div>
-                <span className="font-bold text-foreground">{item.value}%</span>
+                <span className="font-bold text-foreground font-mono">{item.percentage || `${item.value}%`}</span>
               </div>
             ))}
           </div>
