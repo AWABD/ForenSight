@@ -110,41 +110,46 @@ def migrate_database(db_engine):
             
             c1_id = str(uuid.uuid4())
             c2_id = str(uuid.uuid4())
+            c3_id = str(uuid.uuid4())
+            c4_id = str(uuid.uuid4())
+            c5_id = str(uuid.uuid4())
             
-            conn.execute(text(
-                "INSERT INTO cases (id, case_number, title, description, status, reference_number, assigned_to_id, created_at) "
-                "VALUES (:id, :cnum, :title, :desc, 'ACTIVE', :ref, :aid, :created)"
-            ), {
-                "id": c1_id,
-                "cnum": "FS-2026-091",
-                "title": "Financial Embezzlement & Wire Fraud",
-                "desc": "Corporate financial forensic audit regarding unapproved transactions from the staging deployment portal.",
-                "ref": "REF-83893-IND",
-                "aid": admin_id,
-                "created": datetime.utcnow()
-            })
-            
-            conn.execute(text(
-                "INSERT INTO cases (id, case_number, title, description, status, reference_number, assigned_to_id, created_at) "
-                "VALUES (:id, :cnum, :title, :desc, 'ACTIVE', :ref, :aid, :created)"
-            ), {
-                "id": c2_id,
-                "cnum": "FS-2026-104",
-                "title": "Deepfake Tampering & IP Theft",
-                "desc": "Investigation of manipulated verification records, compromised source systems, and EXIF spoofing vectors.",
-                "ref": "REF-92384-US",
-                "aid": admin_id,
-                "created": datetime.utcnow()
-            })
+            cases_data = [
+                (c1_id, "FS-2026-091", "Financial Embezzlement & Wire Fraud", "Corporate financial forensic audit regarding unapproved transactions from the staging deployment portal.", "REF-83893-IND"),
+                (c2_id, "FS-2026-104", "Deepfake Tampering & IP Theft", "Investigation of manipulated verification records, compromised source systems, and EXIF spoofing vectors.", "REF-92384-US"),
+                (c3_id, "FS-2026-112", "Surveillance Video Leak & Industrial Espionage", "Analysis of intercepted CCTV feeds, badge scan records, and ambient room wiretap audio.", "REF-77123-EU"),
+                (c4_id, "FS-2026-128", "Classified Intercept & Cryptographic Key Leak", "Interception of manipulated satellite imagery, synthetic voice memos, and TLS key dumps.", "REF-44910-NATO"),
+                (c5_id, "FS-2026-140", "Sovereign Ransomware & Kernel Memory Dump", "Forensic extraction of host memory dumps, ransomware video extortion clips, and kernel buffer exploits.", "REF-10928-GLOBAL")
+            ]
 
-            # Seed evidence files with anomaly tags
+            for cid, cnum, title, desc, ref in cases_data:
+                conn.execute(text(
+                    "INSERT INTO cases (id, case_number, title, description, status, reference_number, assigned_to_id, created_at) "
+                    "VALUES (:id, :cnum, :title, :desc, 'ACTIVE', :ref, :aid, :created)"
+                ), {
+                    "id": cid,
+                    "cnum": cnum,
+                    "title": title,
+                    "desc": desc,
+                    "ref": ref,
+                    "aid": admin_id,
+                    "created": datetime.utcnow()
+                })
+
+            # Seed evidence files (Photos, Videos, Audios, Logs) with anomaly tags
             evidence_seeds = [
+                # Case 1
                 (c1_id, "db_ledger_dump.sqlite", 42100000, "Database", "f8c3c4d1de0ba3f1a0e1c6b54a8e2bc70c67feaa11223344", "f8c3c4d1de0ba3f1a0e1c6b54a8e2bc70c67feaa11223344", [
                     {"type": "METADATA_SPOOFING", "severity": "HIGH", "message": "12 database rows deleted on 2026-07-28 08:14:10 UTC"}
                 ]),
                 (c1_id, "auth_syslog.log", 1240000, "System Log", "a9c3c4d1de0ba3f1a0e1c6b54a8e2bc70c67feaa55667788", "a9c3c4d1de0ba3f1a0e1c6b54a8e2bc70c67feaa55667788", [
                     {"type": "ACCESS_VIOLATION_LOGS", "severity": "CRITICAL", "message": "Brute-force signature: 142 failed log-in requests from IP 192.168.12.93 in 2 minutes"}
                 ]),
+                (c1_id, "agent_metadata_exif.jpg", 345000, "Image Scan", "e1c3c4d1de0ba3f1a0e1c6b54a8e2bc70c67feaa11112222", "e1c3c4d1de0ba3f1a0e1c6b54a8e2bc70c67feaa11112222", [
+                    {"type": "METADATA_SPOOFING", "severity": "MEDIUM", "message": "GPS metadata coordinates map to remote VPN exit node"}
+                ]),
+
+                # Case 2
                 (c2_id, "employee_record_tampered.jpg", 852000, "Image Scan", "b7c3c4d1de0ba3f1a0e1c6b54a8e2bc70c67feaa99001122", "b7c3c4d1de0ba3f1a0e1c6b54a8e2bc70c67feaa99001122", [
                     {"type": "METADATA_SPOOFING", "severity": "HIGH", "message": "EXIF timestamps set 6 years retroactively. File creation date discrepancy."},
                     {"type": "DEEPFAKE_MEDIA", "severity": "CRITICAL", "message": "Double-quantization matrix deviation maps identify clone-stamp modification"}
@@ -152,8 +157,35 @@ def migrate_database(db_engine):
                 (c2_id, "ceo_audio_statement.mp3", 12400000, "Audio Recording", "c8c3c4d1de0ba3f1a0e1c6b54a8e2bc70c67feaa33445566", "c8c3c4d1de0ba3f1a0e1c6b54a8e2bc70c67feaa33445566", [
                     {"type": "DEEPFAKE_MEDIA", "severity": "CRITICAL", "message": "Spectral analysis tags: 98% synthetic voice match with GAN audio generator signature."}
                 ]),
-                (c2_id, "source_repository_logs.csv", 4500000, "Audit Log", "d9c3c4d1de0ba3f1a0e1c6b54a8e2bc70c67feaa77889900", "d9c3c4d1de0ba3f1a0e1c6b54a8e2bc70c67feaa77889900", [
-                    {"type": "ACCESS_VIOLATION_LOGS", "severity": "WARNING", "message": "Token bypass credentials used on repo path `/security/kms`"}
+                (c2_id, "executive_briefing_leak.mp4", 84500000, "Video Stream", "v2c3c4d1de0ba3f1a0e1c6b54a8e2bc70c67feaa99887766", "v2c3c4d1de0ba3f1a0e1c6b54a8e2bc70c67feaa99887766", [
+                    {"type": "DEEPFAKE_MEDIA", "severity": "CRITICAL", "message": "Deepfake face swap detected on video frames [120-450]"}
+                ]),
+
+                # Case 3
+                (c3_id, "vault_cctv_feed_tampered.mp4", 125000000, "Video Stream", "v3c3c4d1de0ba3f1a0e1c6b54a8e2bc70c67feaa33221144", "v3c3c4d1de0ba3f1a0e1c6b54a8e2bc70c67feaa33221144", [
+                    {"type": "DEEPFAKE_MEDIA", "severity": "CRITICAL", "message": "Looping video frame artifact detected at 02:14:10 UTC"}
+                ]),
+                (c3_id, "security_badge_scan.png", 1200000, "Photo Image", "p3c3c4d1de0ba3f1a0e1c6b54a8e2bc70c67feaa55443322", "p3c3c4d1de0ba3f1a0e1c6b54a8e2bc70c67feaa55443322", [
+                    {"type": "METADATA_SPOOFING", "severity": "HIGH", "message": "Clone-stamp forged badge barcode signature"}
+                ]),
+                (c3_id, "wiretap_mic_recording.wav", 18200000, "Audio Recording", "a3c3c4d1de0ba3f1a0e1c6b54a8e2bc70c67feaa77665544", "a3c3c4d1de0ba3f1a0e1c6b54a8e2bc70c67feaa77665544", [
+                    {"type": "DEEPFAKE_MEDIA", "severity": "HIGH", "message": "Acoustic room frequency phase anomaly"}
+                ]),
+
+                # Case 4
+                (c4_id, "diplomatic_wire_intercept.mp3", 9400000, "Audio Recording", "a4c3c4d1de0ba3f1a0e1c6b54a8e2bc70c67feaa88776655", "a4c3c4d1de0ba3f1a0e1c6b54a8e2bc70c67feaa88776655", [
+                    {"type": "DEEPFAKE_MEDIA", "severity": "CRITICAL", "message": "Deepfake audio pitch shift detected"}
+                ]),
+                (c4_id, "satellite_imagery_spoofed.jpg", 4500000, "Photo Image", "p4c3c4d1de0ba3f1a0e1c6b54a8e2bc70c67feaa99887766", "p4c3c4d1de0ba3f1a0e1c6b54a8e2bc70c67feaa99887766", [
+                    {"type": "METADATA_SPOOFING", "severity": "HIGH", "message": "Geo-coordinate EXIF manipulation tag"}
+                ]),
+
+                # Case 5
+                (c5_id, "ransom_note_video_demand.mp4", 62000000, "Video Clip", "v5c3c4d1de0ba3f1a0e1c6b54a8e2bc70c67feaa11224455", "v5c3c4d1de0ba3f1a0e1c6b54a8e2bc70c67feaa11224455", [
+                    {"type": "DEEPFAKE_MEDIA", "severity": "CRITICAL", "message": "AI generated avatar and voiceover rendering"}
+                ]),
+                (c5_id, "privilege_escalation_audit.log", 2100000, "System Log", "l5c3c4d1de0ba3f1a0e1c6b54a8e2bc70c67feaa66778899", "l5c3c4d1de0ba3f1a0e1c6b54a8e2bc70c67feaa66778899", [
+                    {"type": "ACCESS_VIOLATION_LOGS", "severity": "CRITICAL", "message": "Exploited CVE-2026-3810 kernel buffer overflow"}
                 ])
             ]
 
