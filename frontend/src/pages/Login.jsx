@@ -6,9 +6,9 @@ const Login = ({ onLoginSuccess, onGoToRegister }) => {
   const { darkMode } = useTheme();
   
   // Login form state
-  const [username, setUsername] = useState('investigator_sharma');
-  const [password, setPassword] = useState('leadsecretpass');
-  const [clearance, setClearance] = useState('LeadInvestigator');
+  const [username, setUsername] = useState('admin_root');
+  const [password, setPassword] = useState('sysadminsecret');
+  const [clearance, setClearance] = useState('SysAdmin');
   const [showPassword, setShowPassword] = useState(false);
   
   // App state controls
@@ -65,7 +65,7 @@ const Login = ({ onLoginSuccess, onGoToRegister }) => {
         // Connection failure - fall back to offline sandbox mode
         console.warn("FastAPI backend offline. Logging in via Local Sandbox Mode:", err);
         localStorage.setItem('token', 'mock-sandbox-token');
-        localStorage.setItem('user', JSON.stringify({ username, full_name: "Investigator Sharma (Sandbox)", role_level: clearance }));
+        localStorage.setItem('user', JSON.stringify({ username, full_name: "System Administrator Root (Sandbox)", role_level: clearance }));
         onLoginSuccess();
       }
     });
@@ -108,14 +108,14 @@ const Login = ({ onLoginSuccess, onGoToRegister }) => {
         console.warn("Backend offline. Simulating check status...");
         setTimeout(() => {
           setStatusData({
-            full_name: "Investigator Sharma",
-            email: "sharma.forensics@agency.gov",
-            role_level: "LeadInvestigator",
+            full_name: "System Administrator Root",
+            email: "admin_root@agency.gov",
+            role_level: "SysAdmin",
             is_approved: true,
             secret_code: statusCheckCode,
             user_id: "c270ac76-a880-4f3b-a975-14f002fd9c06",
-            username: "op_investigatorsha_9c1a",
-            generated_passphrase: "fns-pass-mock123"
+            username: "admin_root",
+            generated_passphrase: "sysadminsecret"
           });
         }, 600);
       }
@@ -152,14 +152,14 @@ const Login = ({ onLoginSuccess, onGoToRegister }) => {
 
         {/* Shield Security Banner Badge */}
         <div className="flex justify-center mb-6 pt-4">
-          <div className="bg-primary/20 text-primary dark:text-forensic-glow p-4 rounded-full ring-8 ring-primary/5 transition-transform duration-300 hover:scale-105">
+          <div className="bg-danger/20 text-danger p-4 rounded-full ring-8 ring-danger/10 transition-transform duration-300 hover:scale-105">
             <Fingerprint size={48} className="animate-pulse" />
           </div>
         </div>
 
         <div className="text-center mb-8">
           <h2 className="text-2xl font-bold tracking-tight text-foreground">ForenSight SECURE PORTAL</h2>
-          <p className="text-xs text-muted mt-2">AI-Powered Evidentiary Ingestion & Forensic Workbench</p>
+          <p className="text-xs text-muted mt-2">AI-Powered Evidentiary Ingestion & Master Administrative Console</p>
         </div>
 
         {/* Error Alert Box */}
@@ -174,19 +174,19 @@ const Login = ({ onLoginSuccess, onGoToRegister }) => {
             {/* Clearance Level Selection */}
             <div>
               <label className="text-[10px] font-bold uppercase tracking-wider text-muted block mb-1.5 flex items-center gap-1.5">
-                <Shield size={12} className="text-primary" />
+                <Shield size={12} className="text-danger" />
                 Required Security Clearance Level
               </label>
               <select
                 value={clearance}
                 onChange={(e) => setClearance(e.target.value)}
-                className="w-full bg-background border rounded-lg px-4 py-2.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all font-semibold"
+                className="w-full bg-background border rounded-lg px-4 py-2.5 text-xs text-danger font-extrabold focus:outline-none focus:ring-1 focus:ring-danger focus:border-danger transition-all font-semibold"
               >
                 <option value="SysAdmin">Level 4 - System Administrator (SysAdmin)</option>
-                <option value="LeadInvestigator">Level 3 - Lead Forensic Examiner</option>
-                <option value="Analyst">Level 2 - Forensic Analyst</option>
-                <option value="LegalAuditor">Level 1 - Legal Auditor / Observer</option>
               </select>
+              <span className="text-[9px] text-danger/80 font-bold block mt-1">
+                🔒 System Mode: Administrator Portal Enabled
+              </span>
             </div>
 
             {/* Operator Username */}

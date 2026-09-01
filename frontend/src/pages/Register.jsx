@@ -7,7 +7,7 @@ const Register = ({ onGoToLogin }) => {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [agencyId, setAgencyId] = useState('');
-  const [clearance, setClearance] = useState('Analyst');
+  const [clearance, setClearance] = useState('SysAdmin');
   const [justification, setJustification] = useState('');
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
