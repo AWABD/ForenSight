@@ -58,16 +58,7 @@ const Login = ({ onLoginSuccess, onGoToRegister }) => {
     })
     .catch((err) => {
       setLoading(false);
-      if (err.status === 401 || err.status === 403) {
-        // Real validation error from database auth
-        setErrorMessage(err.message);
-      } else {
-        // Connection failure - fall back to offline sandbox mode
-        console.warn("FastAPI backend offline. Logging in via Local Sandbox Mode:", err);
-        localStorage.setItem('token', 'mock-sandbox-token');
-        localStorage.setItem('user', JSON.stringify({ username, full_name: "System Administrator Root (Sandbox)", role_level: clearance }));
-        onLoginSuccess();
-      }
+      setErrorMessage(err.message || "Authentication failed. Invalid operator username or passphrase.");
     });
   };
 

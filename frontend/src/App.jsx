@@ -22,11 +22,15 @@ const AppContent = () => {
   const [sessionExpiredNotice, setSessionExpiredNotice] = useState(false);
   const timerRef = useRef(null);
 
-  // 1. Force Logout on Browser Refresh (F5 / Page Reload)
+  // 1. Maintain Active Session Token on Browser Refresh (F5 / Page Reload)
   useEffect(() => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    setCurrentTab('login');
+    const token = localStorage.getItem('token');
+    const user = localStorage.getItem('user');
+    if (token && user) {
+      setCurrentTab('dashboard');
+    } else {
+      setCurrentTab('login');
+    }
   }, []);
 
   // 2. 5-Minute Inactivity Auto-Logout Handler
