@@ -21,10 +21,18 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Set up CORS middleware to allow cross-origin requests from the React frontend
+# Set up CORS middleware to allow cross-origin requests from Vercel and local React frontend
+origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:3000",
+    "https://foren-sight.vercel.app",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # In production, lock down to the React client domain
+    allow_origins=origins,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

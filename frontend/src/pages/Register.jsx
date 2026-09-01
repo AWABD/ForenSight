@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Fingerprint, Shield, Mail, FileText, ChevronLeft, Loader2, CheckCircle2 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
+import { API_BASE_URL } from '../config';
 
 const Register = ({ onGoToLogin }) => {
   const { darkMode } = useTheme();
@@ -17,7 +18,7 @@ const Register = ({ onGoToLogin }) => {
     e.preventDefault();
     setLoading(true);
     
-    fetch('http://127.0.0.1:8000/api/v1/auth/register', {
+    fetch(`${API_BASE_URL}/auth/register`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'

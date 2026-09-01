@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
-const ProjectContext = createContext();
+import { API_BASE_URL } from '../config';
 
-const API_BASE_URL = 'http://127.0.0.1:8000/api/v1';
+const ProjectContext = createContext();
 
 // SHA-256 Mock generator fallback
 const generateHash = (fileName) => {

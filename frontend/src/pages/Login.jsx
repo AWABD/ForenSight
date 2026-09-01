@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Fingerprint, Shield, Key, Eye, EyeOff, Loader2, ArrowLeft, Search, ShieldCheck, ShieldAlert, Copy, Check } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
+import { API_BASE_URL } from '../config';
 
 const Login = ({ onLoginSuccess, onGoToRegister }) => {
   const { darkMode } = useTheme();
@@ -26,7 +27,7 @@ const Login = ({ onLoginSuccess, onGoToRegister }) => {
     setLoading(true);
     setErrorMessage('');
     
-    fetch('http://127.0.0.1:8000/api/v1/auth/login', {
+    fetch(`${API_BASE_URL}/auth/login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -70,7 +71,7 @@ const Login = ({ onLoginSuccess, onGoToRegister }) => {
     setErrorMessage('');
     setStatusData(null);
 
-    fetch(`http://127.0.0.1:8000/api/v1/auth/registration-status/${statusCheckCode.trim()}`, {
+    fetch(`${API_BASE_URL}/auth/registration-status/${statusCheckCode.trim()}`, {
       method: 'GET'
     })
     .then(async (res) => {

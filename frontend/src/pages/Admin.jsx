@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { UserCheck, Cpu, HardDrive, ShieldCheck, RefreshCw, Layers, Sliders, ToggleLeft, ToggleRight, XCircle } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
+import { API_BASE_URL } from '../config';
 
 const Admin = () => {
   const [modelRunning, setModelRunning] = useState({
@@ -30,7 +31,7 @@ const Admin = () => {
     }
 
     setLoadingRequests(true);
-    fetch('http://127.0.0.1:8000/api/v1/admin/registrations', {
+    fetch(`${API_BASE_URL}/admin/registrations`, {
       headers: {
         'Authorization': `Bearer ${token}`
       }
@@ -67,7 +68,7 @@ const Admin = () => {
       return;
     }
 
-    fetch(`http://127.0.0.1:8000/api/v1/admin/registrations/${id}/approve`, {
+    fetch(`${API_BASE_URL}/admin/registrations/${id}/approve`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`
@@ -91,7 +92,7 @@ const Admin = () => {
 
     if (!confirm("Are you sure you want to reject and delete this registration request?")) return;
 
-    fetch(`http://127.0.0.1:8000/api/v1/admin/registrations/${id}/reject`, {
+    fetch(`${API_BASE_URL}/admin/registrations/${id}/reject`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`
