@@ -10,6 +10,24 @@ const Login = ({ onLoginSuccess, onGoToRegister }) => {
   const [username, setUsername] = useState('admin_root');
   const [password, setPassword] = useState('sysadminsecret');
   const [clearance, setClearance] = useState('SysAdmin');
+
+  // Role change handler with pre-seeded demo credential auto-fill
+  const handleRoleChange = (selectedRole) => {
+    setClearance(selectedRole);
+    if (selectedRole === 'SysAdmin') {
+      setUsername('admin_root');
+      setPassword('sysadminsecret');
+    } else if (selectedRole === 'LeadInvestigator') {
+      setUsername('investigator_sharma');
+      setPassword('leadsecretpass');
+    } else if (selectedRole === 'Analyst') {
+      setUsername('analyst_connor');
+      setPassword('analystsecret');
+    } else if (selectedRole === 'LegalAuditor') {
+      setUsername('auditor_legal');
+      setPassword('auditorsecret');
+    }
+  };
   const [showPassword, setShowPassword] = useState(false);
   
   // App state controls
@@ -171,13 +189,29 @@ const Login = ({ onLoginSuccess, onGoToRegister }) => {
               </label>
               <select
                 value={clearance}
-                onChange={(e) => setClearance(e.target.value)}
-                className="w-full bg-background border rounded-lg px-4 py-2.5 text-xs text-danger font-extrabold focus:outline-none focus:ring-1 focus:ring-danger focus:border-danger transition-all font-semibold"
+                onChange={(e) => handleRoleChange(e.target.value)}
+                className={`w-full bg-background border rounded-lg px-4 py-2.5 text-xs font-extrabold focus:outline-none focus:ring-1 transition-all ${
+                  clearance === 'SysAdmin' ? 'text-danger border-danger/40 focus:ring-danger' :
+                  clearance === 'LeadInvestigator' ? 'text-primary border-primary/40 focus:ring-primary' :
+                  clearance === 'Analyst' ? 'text-warning border-warning/40 focus:ring-warning' :
+                  'text-success border-success/40 focus:ring-success'
+                }`}
               >
                 <option value="SysAdmin">Level 4 - System Administrator (SysAdmin)</option>
+                <option value="LeadInvestigator">Level 3 - Lead Forensic Examiner (LeadInvestigator)</option>
+                <option value="Analyst">Level 2 - Forensic Analyst (Analyst)</option>
+                <option value="LegalAuditor">Level 1 - Legal Auditor (LegalAuditor)</option>
               </select>
-              <span className="text-[9px] text-danger/80 font-bold block mt-1">
-                🔒 System Mode: Administrator Portal Enabled
+              <span className={`text-[9px] font-bold block mt-1 ${
+                clearance === 'SysAdmin' ? 'text-danger' :
+                clearance === 'LeadInvestigator' ? 'text-primary' :
+                clearance === 'Analyst' ? 'text-warning' :
+                'text-success'
+              }`}>
+                {clearance === 'SysAdmin' && '🔒 Full Master Rights | System Console | Purge Operations'}
+                {clearance === 'LeadInvestigator' && '🔍 Case Creation | Evidence Ingestion | OCR Engine Control'}
+                {clearance === 'Analyst' && '📊 Evidence Deep Analysis | Relationship Graph | AI Summary'}
+                {clearance === 'LegalAuditor' && '⚖️ Read-Only Compliance Oversight | Immutable Chain of Custody'}
               </span>
             </div>
 

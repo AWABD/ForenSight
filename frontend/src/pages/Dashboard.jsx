@@ -115,40 +115,95 @@ const Dashboard = ({ setCurrentTab }) => {
     }, 2000);
   };
 
+  // Retrieve active operator session & role level
+  const userJson = localStorage.getItem('user');
+  const user = userJson ? JSON.parse(userJson) : { role_level: 'SysAdmin', username: 'admin_root', full_name: 'System Administrator Root' };
+  const userRole = user.role_level || 'SysAdmin';
+
   // Safe calculators
   const anomaliesCount = caseEvidence.reduce((acc, curr) => acc + (curr.anomalies?.length || 0), 0);
   const totalVolume = (caseEvidence.reduce((acc, curr) => acc + curr.fileSize, 0) / (1024 * 1024)).toFixed(2);
 
   return (
     <div className="space-y-6">
-      {/* Upper Case Header Notification */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 border rounded-xl glassmorphism bg-grid-dots">
-        <div>
-          <span className="text-[10px] bg-primary/10 text-primary dark:text-forensic-glow font-bold px-2.5 py-1 rounded-full uppercase tracking-wider">
-            Clearance Verified
-          </span>
-          <h2 className="text-xl font-extrabold tracking-tight text-foreground mt-2">
-            Investigation Command Console
+      {/* Role-Specific Upper Command Banner */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 border rounded-xl glassmorphism bg-grid-dots relative overflow-hidden">
+        <div className="space-y-1">
+          {/* Dynamic Role Badge */}
+          <div className="flex items-center gap-2">
+            <span className={`text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider ${
+              userRole === 'SysAdmin' ? 'bg-danger/20 text-danger border border-danger/30' :
+              userRole === 'LeadInvestigator' ? 'bg-primary/20 text-primary border border-primary/30' :
+              userRole === 'Analyst' ? 'bg-warning/20 text-warning border border-warning/30' :
+              'bg-success/20 text-success border border-success/30'
+            }`}>
+              {userRole === 'SysAdmin' && '🔒 Level 4 — Master Administrator Clearance'}
+              {userRole === 'LeadInvestigator' && '🔍 Level 3 — Lead Forensic Examiner Clearance'}
+              {userRole === 'Analyst' && '📊 Level 2 — Forensic Analyst Clearance'}
+              {userRole === 'LegalAuditor' && '⚖️ Level 1 — Legal Auditor Clearance'}
+            </span>
+            <span className="text-[10px] text-muted font-mono">Operator: {user.full_name || user.username}</span>
+          </div>
+
+          {/* Role-tailored Dashboard Title */}
+          <h2 className="text-xl font-black tracking-tight text-foreground mt-2">
+            {userRole === 'SysAdmin' && 'System Infrastructure & Master Operations Console'}
+            {userRole === 'LeadInvestigator' && 'Forensic Case Investigation & Evidence Command'}
+            {userRole === 'Analyst' && 'Digital Evidence Analysis & AI Inspection Workbench'}
+            {userRole === 'LegalAuditor' && 'Legal Compliance Oversight & Audit Ledger Portal'}
           </h2>
-          <p className="text-xs text-muted mt-1">
-            Analyzing case file: <strong className="text-foreground">{activeCase.caseNumber} - {activeCase.title}</strong>
+
+          <p className="text-xs text-muted">
+            Analyzing case workspace: <strong className="text-foreground font-mono">{activeCase.caseNumber} - {activeCase.title}</strong>
           </p>
         </div>
         
-        {/* Rapid Actions */}
-        <div className="flex items-center gap-2">
-          <button 
-            onClick={() => setCurrentTab('upload')}
-            className="bg-primary hover:bg-primary-dark text-white rounded-lg px-4 py-2 text-xs font-bold transition-all shadow hover:shadow-primary/20 flex items-center gap-1.5"
-          >
-            <FolderSync size={14} />
-            <span>Ingest Evidence</span>
-          </button>
+        {/* Role-tailored Rapid Action Buttons */}
+        <div className="flex flex-wrap items-center gap-2">
+          {userRole === 'SysAdmin' && (
+            <button 
+              onClick={() => setCurrentTab('admin')}
+              className="bg-danger hover:bg-danger/90 text-white rounded-lg px-3.5 py-2 text-xs font-bold transition-all shadow-md flex items-center gap-1.5"
+            >
+              <Database size={14} />
+              <span>Admin Console</span>
+            </button>
+          )}
+
+          {(userRole === 'SysAdmin' || userRole === 'LeadInvestigator') && (
+            <button 
+              onClick={() => setCurrentTab('upload')}
+              className="bg-primary hover:bg-primary-dark text-white rounded-lg px-3.5 py-2 text-xs font-bold transition-all shadow-md flex items-center gap-1.5"
+            >
+              <FolderSync size={14} />
+              <span>Ingest Evidence</span>
+            </button>
+          )}
+
+          {userRole === 'Analyst' && (
+            <button 
+              onClick={() => setCurrentTab('viewer')}
+              className="bg-warning hover:bg-warning/90 text-slate-950 rounded-lg px-3.5 py-2 text-xs font-extrabold transition-all shadow-md flex items-center gap-1.5"
+            >
+              <Search size={14} />
+              <span>Deep Analysis</span>
+            </button>
+          )}
+
+          {userRole === 'LegalAuditor' && (
+            <button 
+              onClick={() => setCurrentTab('report')}
+              className="bg-success hover:bg-success/90 text-white rounded-lg px-3.5 py-2 text-xs font-bold transition-all shadow-md flex items-center gap-1.5"
+            >
+              <FileSpreadsheet size={14} />
+              <span>Generate Audit Report</span>
+            </button>
+          )}
           
           <button 
             onClick={verifyLedgerIntegrity}
             disabled={verifyingLedger}
-            className="border hover:bg-border/20 text-foreground rounded-lg px-4 py-2 text-xs font-bold transition-all flex items-center gap-1.5"
+            className="border hover:bg-border/20 text-foreground rounded-lg px-3.5 py-2 text-xs font-bold transition-all flex items-center gap-1.5"
           >
             <RefreshCw size={14} className={verifyingLedger ? 'animate-spin' : ''} />
             <span>Verify CoC Ledger</span>
