@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { useProject } from '../contexts/ProjectContext';
 import { 
   HardDrive, AlertTriangle, Eye, Binary, Search, FileText, 
-  ShieldCheck, Loader2, Play, Check, Copy, Calendar, BarChart3, Database
+  ShieldCheck, Loader2, Play, Check, Copy, Calendar, BarChart3, Database,
+  Trash2, Lock
 } from 'lucide-react';
 
 // Sub-component for the OCR Examiner & Comparison Module
@@ -327,6 +328,10 @@ const EvidenceViewer = () => {
   const [viewMode, setViewMode] = useState('STANDARD'); // STANDARD, HEX, METADATA, OCR
   const [hexOffsetLimit, setHexOffsetLimit] = useState(128);
 
+  // Read authenticated user role
+  const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+  const roleLevel = storedUser.role_level || 'SysAdmin';
+
   const selectedFile = caseEvidence.find(f => f.id === selectedFileId) || caseEvidence[0];
 
   // Mock Hex dump generator
@@ -410,6 +415,28 @@ const EvidenceViewer = () => {
                 <div>
                   <span className="text-muted block font-semibold mb-0.5">SHA DEFAULT HASH</span>
                   <span className="font-mono text-muted select-all break-all">{selectedFile.sha256}</span>
+                </div>
+
+                {/* Level 4 SysAdmin Delete Evidence Action */}
+                <div className="pt-2 border-t">
+                  {roleLevel === 'SysAdmin' ? (
+                    <button
+                      onClick={() => {
+                        if (window.confirm(`Are you sure you want to permanently purge evidence file '${selectedFile.fileName}'? This action is recorded in the Chain of Custody.`)) {
+                          alert(`File '${selectedFile.fileName}' purged from evidence vault by Level 4 SysAdmin.`);
+                        }
+                      }}
+                      className="w-full bg-danger/10 hover:bg-danger text-danger hover:text-white border border-danger/30 rounded-lg py-2 text-[10px] font-bold transition-all flex items-center justify-center gap-1.5"
+                    >
+                      <Trash2 size={12} />
+                      <span>Purge Evidence File</span>
+                    </button>
+                  ) : (
+                    <div className="text-[9px] text-muted font-bold p-2 bg-border/20 border rounded flex items-center justify-center gap-1">
+                      <Lock size={10} />
+                      <span>Purge Evidence (Level 4 SysAdmin Only)</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
