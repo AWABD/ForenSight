@@ -11,11 +11,22 @@ const Login = ({ onLoginSuccess, onGoToRegister }) => {
   const [password, setPassword] = useState('sysadminsecret');
   const [clearance, setClearance] = useState('SysAdmin');
 
-  // Role change handler: All roles connect using the single Master User ID (admin_root)
+  // Role change handler: Auto-fills default User ID for selected role, but input remains 100% editable
   const handleRoleChange = (selectedRole) => {
     setClearance(selectedRole);
-    setUsername('admin_root');
-    setPassword('sysadminsecret');
+    if (selectedRole === 'SysAdmin') {
+      setUsername('admin_root');
+      setPassword('sysadminsecret');
+    } else if (selectedRole === 'LeadInvestigator') {
+      setUsername('investigator_sharma');
+      setPassword('leadsecretpass');
+    } else if (selectedRole === 'Analyst') {
+      setUsername('analyst_connor');
+      setPassword('analystsecret');
+    } else if (selectedRole === 'LegalAuditor') {
+      setUsername('auditor_legal');
+      setPassword('auditorsecret');
+    }
   };
   const [showPassword, setShowPassword] = useState(false);
   
@@ -239,6 +250,41 @@ const Login = ({ onLoginSuccess, onGoToRegister }) => {
                   className="absolute right-3 top-2.5 text-muted hover:text-foreground transition-colors"
                 >
                   {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Demo Operator ID Presets */}
+            <div className="pt-1">
+              <span className="text-[9px] text-muted font-bold block uppercase mb-1.5">Quick Select Operator ID:</span>
+              <div className="grid grid-cols-2 gap-1.5 text-[9px]">
+                <button
+                  type="button"
+                  onClick={() => { setClearance('SysAdmin'); setUsername('admin_root'); setPassword('sysadminsecret'); }}
+                  className="px-2 py-1.5 rounded border border-danger/30 bg-danger/5 hover:bg-danger/15 text-danger font-bold text-left truncate transition-colors"
+                >
+                  🔴 admin_root (L4)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setClearance('LeadInvestigator'); setUsername('investigator_sharma'); setPassword('leadsecretpass'); }}
+                  className="px-2 py-1.5 rounded border border-primary/30 bg-primary/5 hover:bg-primary/15 text-primary font-bold text-left truncate transition-colors"
+                >
+                  🔵 investigator_sharma (L3)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setClearance('Analyst'); setUsername('analyst_connor'); setPassword('analystsecret'); }}
+                  className="px-2 py-1.5 rounded border border-warning/30 bg-warning/5 hover:bg-warning/15 text-warning font-bold text-left truncate transition-colors"
+                >
+                  🟡 analyst_connor (L2)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setClearance('LegalAuditor'); setUsername('auditor_legal'); setPassword('auditorsecret'); }}
+                  className="px-2 py-1.5 rounded border border-success/30 bg-success/5 hover:bg-success/15 text-success font-bold text-left truncate transition-colors"
+                >
+                  🟢 auditor_legal (L1)
                 </button>
               </div>
             </div>
