@@ -11,22 +11,11 @@ const Login = ({ onLoginSuccess, onGoToRegister }) => {
   const [password, setPassword] = useState('sysadminsecret');
   const [clearance, setClearance] = useState('SysAdmin');
 
-  // Role change handler with pre-seeded demo credential auto-fill
+  // Role change handler: All roles connect using the single Master User ID (admin_root)
   const handleRoleChange = (selectedRole) => {
     setClearance(selectedRole);
-    if (selectedRole === 'SysAdmin') {
-      setUsername('admin_root');
-      setPassword('sysadminsecret');
-    } else if (selectedRole === 'LeadInvestigator') {
-      setUsername('investigator_sharma');
-      setPassword('leadsecretpass');
-    } else if (selectedRole === 'Analyst') {
-      setUsername('analyst_connor');
-      setPassword('analystsecret');
-    } else if (selectedRole === 'LegalAuditor') {
-      setUsername('auditor_legal');
-      setPassword('auditorsecret');
-    }
+    setUsername('admin_root');
+    setPassword('sysadminsecret');
   };
   const [showPassword, setShowPassword] = useState(false);
   

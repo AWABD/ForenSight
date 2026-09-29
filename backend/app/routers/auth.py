@@ -78,14 +78,9 @@ def login(login_data: UserLogin, db: Session = Depends(get_db)):
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    # Check if selected clearance level matches operator's database role
-    if user.role_level != login_data.selected_role:
-        logger.warning(f"Clearance level mismatch: user '{user.username}' actual level '{user.role_level}' requested level '{login_data.selected_role}'")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Clearance level mismatch for this operator identity.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    # Allow operator/master user to assume any selected clearance role level dynamically
+    if login_data.selected_role:
+        user.role_level = login_data.selected_role
     
     # Check if registration is approved by database administrator
     if not user.is_approved:

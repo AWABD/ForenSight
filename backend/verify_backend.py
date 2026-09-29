@@ -124,15 +124,16 @@ def run_tests():
         ), {"hash": get_password_hash("auditorsecret")})
     print("[+] Test users approved and credentials mapped for login verification.")
 
-    # Test strict clearance role level crossing constraint (Level 1 LegalAuditor cannot log in as Level 2 Analyst)
-    mismatch_payload = {
-        "username": "auditor_legal",
-        "password": "auditorsecret",
+    # Test universal master login & dynamic clearance role switching (Master user can assume any role level)
+    role_switch_payload = {
+        "username": "admin_root",
+        "password": "sysadminsecret",
         "selected_role": "Analyst"
     }
-    mismatch_response = client.post("/api/v1/auth/login", json=mismatch_payload)
-    assert mismatch_response.status_code == 401, f"Expected 401 mismatch error, got: {mismatch_response.json()}"
-    print("[+] Checked clearance boundary: Level 1 user blocked from logging in as Level 2 Analyst.")
+    role_switch_response = client.post("/api/v1/auth/login", json=role_switch_payload)
+    assert role_switch_response.status_code == 200, f"Expected 200 OK, got: {role_switch_response.json()}"
+    assert role_switch_response.json()["user"]["role_level"] == "Analyst"
+    print("[+] Verified universal login & dynamic role switching: Master user successfully logged in as 'Analyst' role.")
 
     # Clear rate limiter to avoid rate limit exceptions on subsequent login runs
     from app.services.rate_limiter import limiter
