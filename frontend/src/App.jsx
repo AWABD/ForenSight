@@ -121,7 +121,7 @@ const AppContent = () => {
         
         <div className="relative z-10 max-w-7xl mx-auto animate-fade-in">
           {currentTab === 'dashboard' && <Dashboard setCurrentTab={setCurrentTab} />}
-          {currentTab === 'cases' && <Cases />}
+          {currentTab === 'cases' && <Cases setCurrentTab={setCurrentTab} />}
           {currentTab === 'upload' && <EvidenceUpload />}
           {currentTab === 'viewer' && <EvidenceViewer />}
           {currentTab === 'timeline' && <Timeline />}

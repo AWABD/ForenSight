@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { useProject } from '../contexts/ProjectContext';
-import { FileText, Printer, ShieldCheck, Signature, Sparkles, CheckCircle2, UserCheck } from 'lucide-react';
+import { FileText, Printer, ShieldCheck, Signature, Sparkles, CheckCircle2, UserCheck, Briefcase, AlertTriangle } from 'lucide-react';
 
 const ReportViewer = () => {
-  const { activeCase, caseEvidence, caseTimeline } = useProject();
+  const { cases, activeCase, selectedCaseId, setSelectedCaseId, caseEvidence, caseTimeline } = useProject();
   const [signed, setSigned] = useState(false);
   const [signing, setSigning] = useState(false);
-  const [reportNotes, setReportNotes] = useState('Local models parsed elements. Discrepancies mapped.');
+  const [reportNotes, setReportNotes] = useState('Local models parsed elements. Discrepancies and anomaly vectors mapped cleanly across evidence items.');
 
   const handleSignOff = () => {
     setSigning(true);
@@ -29,13 +29,26 @@ const ReportViewer = () => {
           <p className="text-xs text-muted">Generate court-admissible PDF briefs containing baseline digital hashes, metadata, timelines, and credentials certificates.</p>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* Case selector & Actions */}
+        <div className="flex flex-wrap items-center gap-2">
+          <select 
+            value={selectedCaseId} 
+            onChange={(e) => setSelectedCaseId(e.target.value)}
+            className="bg-background border rounded-lg px-3 py-2 text-xs font-bold text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all font-mono"
+          >
+            {cases.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.caseNumber} - {c.title.substring(0, 18)}...
+              </option>
+            ))}
+          </select>
+
           <button
             onClick={handlePrint}
-            className="border hover:bg-border/20 text-foreground rounded-lg px-4 py-2 text-xs font-bold transition-all flex items-center gap-1.5"
+            className="border hover:bg-border/20 text-foreground rounded-lg px-3.5 py-2 text-xs font-bold transition-all flex items-center gap-1.5"
           >
             <Printer size={14} />
-            <span>Print / Print to PDF</span>
+            <span>Print to PDF</span>
           </button>
 
           <button
@@ -58,9 +71,9 @@ const ReportViewer = () => {
           
           {/* Header Banner */}
           <div className="border-b-4 border-slate-900 pb-5 text-center space-y-1 font-sans">
-             <h1 className="text-xl font-black tracking-widest uppercase">FEDERAL INVESTIGATION DIGITAL FORENSICS</h1>
-             <p className="text-[10px] tracking-widest text-slate-500 uppercase font-black">Admissible Forensic Examination Record Brief</p>
-             <span className="text-[9px] bg-slate-100 text-slate-800 font-mono px-2 py-0.5 rounded inline-block mt-2">
+             <h1 className="text-xl font-black tracking-widest uppercase text-slate-950">FEDERAL INVESTIGATION DIGITAL FORENSICS</h1>
+             <p className="text-[10px] tracking-widest text-slate-600 uppercase font-black">Admissible Forensic Examination Record Brief</p>
+             <span className="text-[9px] bg-slate-100 text-slate-800 font-mono px-2 py-0.5 rounded inline-block mt-2 border border-slate-300">
                CASE REF: {activeCase.referenceNumber}
              </span>
           </div>
@@ -86,56 +99,85 @@ const ReportViewer = () => {
 
           {/* Section 1: Executive brief */}
           <div className="space-y-2">
-             <h3 className="font-sans font-bold text-xs uppercase text-slate-900 tracking-wider">I. CASE CABINET SUMMARY</h3>
+             <h3 className="font-sans font-bold text-xs uppercase text-slate-900 tracking-wider">I. CASE CABINET SUMMARY & OBJECTIVES</h3>
              <p className="text-[12px] leading-relaxed text-slate-800">
                Pursuant to modern forensic specifications of digital evidentiary handling regulations (**ISO/IEC 27037**), the Chief Examiner certifies the examination details listed below. Raw digital containers are preserved and locked locally in standard write-once configurations.
              </p>
-             <p className="text-[12px] leading-relaxed text-slate-800 italic bg-slate-50 p-3 border rounded font-mono">
+             <p className="text-[12px] leading-relaxed text-slate-900 italic bg-slate-50 p-3 border border-slate-300 rounded font-mono">
                "{activeCase.description}"
              </p>
           </div>
 
           {/* Section 2: Evidentiary items and hashes table */}
           <div className="space-y-3 pt-2">
-             <h3 className="font-sans font-bold text-xs uppercase text-slate-900 tracking-wider">II. INGESTED ASSETS & DIGITAL HASH MATRIX</h3>
-             <div className="border border-slate-350 rounded overflow-hidden font-mono text-[9px] w-full">
-               <table className="w-full text-left border-collapse">
-                 <thead>
-                   <tr className="bg-slate-100 text-slate-600 border-b border-slate-300">
-                     <th className="p-2 w-1/4">File Name</th>
-                     <th className="p-2 w-1/6">Size</th>
-                     <th className="p-2">SHA-256 Valid Evidentiary Hash Record</th>
-                   </tr>
-                 </thead>
-                 <tbody>
-                   {caseEvidence.map(f => (
-                     <tr key={f.id} className="border-b last:border-none border-slate-200">
-                       <td className="p-2 font-sans font-bold text-slate-950">{f.fileName}</td>
-                       <td className="p-2">{(f.fileSize / (1024 * 1024)).toFixed(2)} MB</td>
-                       <td className="p-2 text-slate-700 select-all break-all">{f.sha256}</td>
-                     </tr>
-                   ))}
-                 </tbody>
-               </table>
+             <div className="flex items-center justify-between font-sans">
+               <h3 className="font-bold text-xs uppercase text-slate-900 tracking-wider">II. INGESTED ASSETS & DIGITAL HASH MATRIX ({caseEvidence.length} items)</h3>
              </div>
+             {caseEvidence.length > 0 ? (
+               <div className="border border-slate-350 rounded overflow-hidden font-mono text-[9px] w-full">
+                 <table className="w-full text-left border-collapse">
+                   <thead>
+                     <tr className="bg-slate-100 text-slate-700 border-b border-slate-300 font-sans">
+                       <th className="p-2 w-1/4">File Name</th>
+                       <th className="p-2 w-1/6">Type</th>
+                       <th className="p-2 w-1/6">Size</th>
+                       <th className="p-2">SHA-256 Valid Evidentiary Hash Record</th>
+                       <th className="p-2 w-1/6">Anomaly Status</th>
+                     </tr>
+                   </thead>
+                   <tbody>
+                     {caseEvidence.map(f => (
+                       <tr key={f.id} className="border-b last:border-none border-slate-200">
+                         <td className="p-2 font-sans font-bold text-slate-950">{f.fileName}</td>
+                         <td className="p-2 font-sans text-slate-700">{f.fileType}</td>
+                         <td className="p-2 text-slate-800">{(f.fileSize / (1024 * 1024)).toFixed(2)} MB</td>
+                         <td className="p-2 text-slate-700 select-all break-all">{f.sha256}</td>
+                         <td className="p-2 font-sans">
+                           {f.anomalies && f.anomalies.length > 0 ? (
+                             <span className="text-red-700 font-bold uppercase text-[8px] bg-red-50 border border-red-200 px-1.5 py-0.5 rounded">
+                               {f.anomalies.length} Flagged
+                             </span>
+                           ) : (
+                             <span className="text-emerald-700 font-bold uppercase text-[8px] bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">
+                               Clean
+                             </span>
+                           )}
+                         </td>
+                       </tr>
+                     ))}
+                   </tbody>
+                 </table>
+               </div>
+             ) : (
+               <p className="text-xs text-slate-500 italic font-sans">No evidence items uploaded to this case cabinet.</p>
+             )}
           </div>
 
           {/* Section 3: Timeline Summary */}
           <div className="space-y-3 pt-2">
              <h3 className="font-sans font-bold text-xs uppercase text-slate-900 tracking-wider">III. ANOMALOUS CHRONOLOGY METRIC LOGS</h3>
              <div className="space-y-2.5 font-sans">
-               {caseTimeline.filter(e => e.severity === 'CRITICAL' || e.severity === 'HIGH').map((event) => (
-                 <div key={event.id} className="p-3 border rounded border-slate-200 bg-slate-50 flex flex-col gap-1 text-[10.5px]">
-                    <div className="flex items-center justify-between text-slate-500 font-mono text-[9px]">
-                      <span>TIMESTAMP: {event.timestamp.replace('T', ' ').substring(0, 19)} UTC</span>
-                      <strong className="text-red-700 uppercase font-black">{event.severity}</strong>
-                    </div>
-                    <p className="text-slate-800 leading-relaxed font-semibold">
-                      {event.description}
-                    </p>
-                    <span className="text-[8.5px] font-mono text-slate-400">File Reference: {event.source}</span>
-                 </div>
-               ))}
+               {caseTimeline.length > 0 ? (
+                 caseTimeline.map((event) => (
+                   <div key={event.id} className="p-3 border rounded border-slate-200 bg-slate-50 flex flex-col gap-1 text-[10.5px]">
+                      <div className="flex items-center justify-between text-slate-500 font-mono text-[9px]">
+                        <span>TIMESTAMP: {event.timestamp.replace('T', ' ').substring(0, 19)} UTC</span>
+                        <strong className={`uppercase font-black ${
+                          event.severity === 'CRITICAL' ? 'text-red-700' :
+                          event.severity === 'HIGH' ? 'text-amber-700' : 'text-blue-700'
+                        }`}>
+                          {event.severity}
+                        </strong>
+                      </div>
+                      <p className="text-slate-900 leading-relaxed font-semibold">
+                        {event.description}
+                      </p>
+                      <span className="text-[8.5px] font-mono text-slate-500">File Reference: {event.source}</span>
+                   </div>
+                 ))
+               ) : (
+                 <p className="text-xs text-slate-500 italic">No timeline anomalies recorded for this case cabinet.</p>
+               )}
              </div>
           </div>
 
@@ -148,13 +190,13 @@ const ReportViewer = () => {
                   <div className="p-3 border border-emerald-300 bg-emerald-50 rounded text-[9.5px] text-emerald-800 font-semibold space-y-1">
                      <div className="flex items-center gap-1.5 font-bold uppercase">
                        <ShieldCheck size={14} className="text-emerald-600" />
-                       <span>Signed Digitally</span>
+                       <span>Signed Digitally & Certified</span>
                      </div>
                      <span className="block font-mono text-slate-500 text-[8.5px]">CERT: SHA256-RSA-FNS-{activeCase.caseNumber}</span>
                   </div>
                 ) : (
                   <div className="h-10 border border-dashed border-slate-300 rounded bg-slate-50 flex items-center justify-center text-[10px] text-slate-400">
-                     Awaiting signing credentials
+                     Awaiting examiner signature credentials
                   </div>
                 )}
              </div>
@@ -179,7 +221,7 @@ const ReportViewer = () => {
 
             <div className="space-y-3 text-[10px]">
               <div>
-                <label className="text-muted font-bold block mb-1">Add Examiner Case Concluding Notes</label>
+                <label className="text-muted font-bold block mb-1">Add Examiner Concluding Notes</label>
                 <textarea
                   rows="4"
                   value={reportNotes}
