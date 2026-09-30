@@ -39,6 +39,42 @@ const initialCases = [
     createdAt: '2026-07-30T14:15:00Z',
     evidenceCount: 3,
     anomalyRate: '75%'
+  },
+  {
+    id: 'c3',
+    caseNumber: 'FS-2026-112',
+    title: 'Surveillance CCTV & Facility Perimeter Leak',
+    description: 'Physical perimeter access breach and tampered video feed frame drops at Substation Alpha.',
+    status: 'ACTIVE',
+    referenceNumber: 'REF-77182-EU',
+    assignedTo: 'Lead Investigator Dr. A. Sharma',
+    createdAt: '2026-08-02T11:20:00Z',
+    evidenceCount: 2,
+    anomalyRate: '50%'
+  },
+  {
+    id: 'c4',
+    caseNumber: 'FS-2026-128',
+    title: 'Classified Wire Intercept & Signal Spool',
+    description: 'Encrypted satellite channel telemetry extraction and unauthorized frequency hopping capture.',
+    status: 'ACTIVE',
+    referenceNumber: 'REF-55192-DEF',
+    assignedTo: 'Analyst Connor K.',
+    createdAt: '2026-08-04T16:45:00Z',
+    evidenceCount: 2,
+    anomalyRate: '60%'
+  },
+  {
+    id: 'c5',
+    caseNumber: 'FS-2026-140',
+    title: 'Sovereign Ransomware & Master Key Intrusion',
+    description: 'Zero-day ransomware payload analysis targeting master key distribution servers.',
+    status: 'UNDER REVIEW',
+    referenceNumber: 'REF-11928-INT',
+    assignedTo: 'SysAdmin Root',
+    createdAt: '2026-08-06T08:00:00Z',
+    evidenceCount: 2,
+    anomalyRate: '90%'
   }
 ];
 
@@ -77,7 +113,7 @@ const initialEvidence = {
       sha3: generateHash('agent_metadata_exif.jpg_sha3'),
       ingestedAt: '2026-07-28T10:15:30Z',
       exif: {
-        camera: 'iPhone 13',
+        camera: 'iPhone 13 Pro',
         gps: '28.6139, 77.2090 (New Delhi)',
         timestamp: '2026-07-28T08:12:00Z'
       },
@@ -124,8 +160,85 @@ const initialEvidence = {
       sha3: generateHash('ceo_audio_statement.mp3_sha3'),
       ingestedAt: '2026-07-30T15:30:00Z',
       anomalies: [
-        { type: 'DEEPFAKE_AUDIO', severity: 'CRITICAL', message: 'Spectral analysis tags: 98% synthetic voice match with GAN audio generator signature. High similarity index in phase shifts.' }
+        { type: 'DEEPFAKE_AUDIO', severity: 'CRITICAL', message: 'Spectral analysis tags: 98% synthetic voice match with GAN audio generator signature.' }
       ]
+    }
+  ],
+  'c3': [
+    {
+      id: 'e3_1',
+      fileName: 'cctv_perimeter_gate.mp4',
+      fileSize: 85400000,
+      fileType: 'Video Stream',
+      sha256: generateHash('cctv_perimeter_gate.mp4'),
+      sha3: generateHash('cctv_perimeter_gate.mp4_sha3'),
+      ingestedAt: '2026-08-02T12:00:00Z',
+      anomalies: [
+        { type: 'FRAME_DROP_TAMPERING', severity: 'HIGH', message: '42 consecutive video frames dropped at timestamp 08:14:22.' }
+      ]
+    },
+    {
+      id: 'e3_2',
+      fileName: 'access_badge_scan_logs.txt',
+      fileSize: 220000,
+      fileType: 'System Log',
+      sha256: generateHash('access_badge_scan_logs.txt'),
+      sha3: generateHash('access_badge_scan_logs.txt_sha3'),
+      ingestedAt: '2026-08-02T12:05:00Z',
+      anomalies: []
+    }
+  ],
+  'c4': [
+    {
+      id: 'e4_1',
+      fileName: 'wiretap_intercept_ch4.wav',
+      fileSize: 24500000,
+      fileType: 'Audio Recording',
+      sha256: generateHash('wiretap_intercept_ch4.wav'),
+      sha3: generateHash('wiretap_intercept_ch4.wav_sha3'),
+      ingestedAt: '2026-08-04T17:10:00Z',
+      anomalies: [
+        { type: 'DEEPFAKE_AUDIO', severity: 'CRITICAL', message: 'Synthetic frequency injection detected on frequency range 3400Hz-3800Hz.' }
+      ]
+    },
+    {
+      id: 'e4_2',
+      fileName: 'satellite_telemetry_dump.json',
+      fileSize: 1800000,
+      fileType: 'JSON Data',
+      sha256: generateHash('satellite_telemetry_dump.json'),
+      sha3: generateHash('satellite_telemetry_dump.json_sha3'),
+      ingestedAt: '2026-08-04T17:15:00Z',
+      anomalies: []
+    }
+  ],
+  'c5': [
+    {
+      id: 'e5_1',
+      fileName: 'master_key_ransomware_payload.exe',
+      fileSize: 1540000,
+      fileType: 'Binary Executable',
+      sha256: generateHash('master_key_ransomware_payload.exe'),
+      sha3: generateHash('master_key_ransomware_payload.exe_sha3'),
+      ingestedAt: '2026-08-06T08:30:00Z',
+      anomalies: [
+        { type: 'ZERO_DAY_PAYLOAD', severity: 'CRITICAL', message: 'AES-256 key destruction subroutine detected in binary offset 0x004A2F.' }
+      ]
+    },
+    {
+      id: 'e5_2',
+      fileName: 'decryption_demand_note.png',
+      fileSize: 620000,
+      fileType: 'Image Scan',
+      sha256: generateHash('decryption_demand_note.png'),
+      sha3: generateHash('decryption_demand_note.png_sha3'),
+      ingestedAt: '2026-08-06T08:35:00Z',
+      exif: {
+        camera: 'OCR Extracted PNG Document',
+        gps: '55.7558, 37.6173 (Moscow Node)',
+        timestamp: '2026-08-06T07:55:00Z'
+      },
+      anomalies: []
     }
   ]
 };
@@ -139,6 +252,15 @@ const initialTimeline = {
   'c2': [
     { id: 't2_1', timestamp: '2026-07-30T10:00:00Z', type: 'SOURCE_GIT', source: 'source_repository_logs.csv', description: 'Branch merge: master pulled from user dev_compromised', severity: 'WARNING' },
     { id: 't2_2', timestamp: '2026-07-30T11:15:30Z', type: 'AUDIO_CREATE', source: 'ceo_audio_statement.mp3', description: 'Voice memo file generated. AI metrics flag synthetic rendering', severity: 'CRITICAL' }
+  ],
+  'c3': [
+    { id: 't3_1', timestamp: '2026-08-02T08:14:22Z', type: 'CCTV_DROP', source: 'cctv_perimeter_gate.mp4', description: '42 video frames missing during perimeter gate breach', severity: 'HIGH' }
+  ],
+  'c4': [
+    { id: 't4_1', timestamp: '2026-08-04T16:50:00Z', type: 'WIRE_HOP', source: 'wiretap_intercept_ch4.wav', description: 'Frequency hopping detected on channel 4 wiretap stream', severity: 'CRITICAL' }
+  ],
+  'c5': [
+    { id: 't5_1', timestamp: '2026-08-06T07:55:00Z', type: 'RANSOM_PAYLOAD', source: 'master_key_ransomware_payload.exe', description: 'Ransomware binary executed key wiper routine', severity: 'CRITICAL' }
   ]
 };
 

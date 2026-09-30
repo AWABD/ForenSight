@@ -332,6 +332,17 @@ const EvidenceViewer = () => {
   const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
   const roleLevel = storedUser.role_level || 'SysAdmin';
 
+  // Synchronize selected file ID whenever active case or case evidence changes
+  React.useEffect(() => {
+    if (caseEvidence && caseEvidence.length > 0) {
+      if (!caseEvidence.some(f => f.id === selectedFileId)) {
+        setSelectedFileId(caseEvidence[0].id);
+      }
+    } else {
+      setSelectedFileId('');
+    }
+  }, [caseEvidence, selectedFileId]);
+
   const selectedFile = caseEvidence.find(f => f.id === selectedFileId) || caseEvidence[0];
 
   // Mock Hex dump generator

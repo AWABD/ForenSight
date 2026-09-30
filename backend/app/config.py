@@ -23,6 +23,12 @@ class Settings:
     # File Storage
     STORAGE_VAULT_PATH: Path = Path(os.getenv("STORAGE_VAULT_PATH", "./storage_vault")).resolve()
 
+    # AI & Cloud OCR API Keys
+    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
+    OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
+    ASSEMBLYAI_API_KEY: str = os.getenv("ASSEMBLYAI_API_KEY", "")
+    GOOGLE_CLOUD_VISION_API_KEY: str = os.getenv("GOOGLE_CLOUD_VISION_API_KEY", "")
+
 settings = Settings()
 
 # Ensure the storage vault directory exists
