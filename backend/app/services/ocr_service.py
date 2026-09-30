@@ -32,6 +32,7 @@ except ImportError:
 
 class OCRService:
     _easyocr_reader = None
+    _paddle_ocr = None
 
     @classmethod
     def _get_easyocr_reader(cls):
@@ -41,6 +42,15 @@ class OCRService:
             except Exception as e:
                 logger.error(f"Failed to initialize EasyOCR reader: {e}")
         return cls._easyocr_reader
+
+    @classmethod
+    def _get_paddle_ocr(cls):
+        if cls._paddle_ocr is None and PADDLEOCR_AVAILABLE:
+            try:
+                cls._paddle_ocr = PaddleEngine(use_angle_cls=True, lang='en', show_log=False)
+            except Exception as e:
+                logger.error(f"Failed to initialize PaddleOCR reader: {e}")
+        return cls._paddle_ocr
 
     @staticmethod
     def run_ocr_pipeline(file_path: str, file_name: str) -> Dict[str, Any]:
@@ -85,18 +95,19 @@ class OCRService:
             if PADDLEOCR_AVAILABLE and exists:
                 try:
                     t0 = time.time()
-                    ocr = PaddleEngine(use_angle_cls=True, lang='en', show_log=False)
-                    result = ocr.ocr(file_path, cls=True)
-                    paddleocr_time = max(0.04, round(time.time() - t0, 3))
-                    if result and result[0]:
-                        scores = [line[1][1] for line in result[0]]
-                        paddleocr_acc = round(sum(scores) / len(scores) * 100, 2)
-                        if not extracted_text:
-                            extracted_text = " ".join([line[1][0] for line in result[0]])
-                            bounding_boxes = [
-                                {"box": [int(coord) for pt in line[0] for coord in pt], "text": line[1][0], "confidence": round(float(line[1][1]), 3)}
-                                for line in result[0]
-                            ]
+                    ocr = OCRService._get_paddle_ocr()
+                    if ocr:
+                        result = ocr.ocr(file_path, cls=True)
+                        paddleocr_time = max(0.04, round(time.time() - t0, 3))
+                        if result and result[0]:
+                            scores = [line[1][1] for line in result[0]]
+                            paddleocr_acc = round(sum(scores) / len(scores) * 100, 2)
+                            if not extracted_text:
+                                extracted_text = " ".join([line[1][0] for line in result[0]])
+                                bounding_boxes = [
+                                    {"box": [int(coord) for pt in line[0] for coord in pt], "text": line[1][0], "confidence": round(float(line[1][1]), 3)}
+                                    for line in result[0]
+                                ]
                 except Exception as e:
                     logger.error(f"PaddleOCR execution failure: {e}")
 
