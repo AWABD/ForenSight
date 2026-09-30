@@ -31,6 +31,17 @@ except ImportError:
 
 
 class OCRService:
+    _easyocr_reader = None
+
+    @classmethod
+    def _get_easyocr_reader(cls):
+        if cls._easyocr_reader is None and EASYOCR_AVAILABLE:
+            try:
+                cls._easyocr_reader = easyocr.Reader(['en'], gpu=False, verbose=False)
+            except Exception as e:
+                logger.error(f"Failed to initialize EasyOCR reader: {e}")
+        return cls._easyocr_reader
+
     @staticmethod
     def run_ocr_pipeline(file_path: str, file_name: str) -> Dict[str, Any]:
         """
@@ -57,16 +68,17 @@ class OCRService:
             if EASYOCR_AVAILABLE and exists:
                 try:
                     t0 = time.time()
-                    reader = easyocr.Reader(['en'], gpu=False)
-                    result = reader.readtext(file_path)
-                    easyocr_time = max(0.05, round(time.time() - t0, 3))
-                    easyocr_acc = round(sum(r[2] for r in result) / len(result) * 100, 2) if result else 92.5
-                    
-                    extracted_text = " ".join([r[1] for r in result])
-                    bounding_boxes = [
-                        {"box": [int(coord) for pt in r[0] for coord in pt], "text": r[1], "confidence": round(float(r[2]), 3)}
-                        for r in result
-                    ]
+                    reader = OCRService._get_easyocr_reader()
+                    if reader:
+                        result = reader.readtext(file_path)
+                        easyocr_time = max(0.05, round(time.time() - t0, 3))
+                        easyocr_acc = round(sum(r[2] for r in result) / len(result) * 100, 2) if result else 92.5
+                        
+                        extracted_text = " ".join([r[1] for r in result])
+                        bounding_boxes = [
+                            {"box": [int(coord) for pt in r[0] for coord in pt], "text": r[1], "confidence": round(float(r[2]), 3)}
+                            for r in result
+                        ]
                 except Exception as e:
                     logger.error(f"EasyOCR execution failure: {e}")
 
