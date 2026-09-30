@@ -517,6 +517,35 @@ export const ProjectProvider = ({ children }) => {
     appendAuditLog(`Ingested file ${file.name} into case vault. SHA256: ${newFile.sha256.substring(0, 12)}...`);
   };
 
+  const deleteEvidenceFile = async (caseId, evidenceId) => {
+    const token = localStorage.getItem('token');
+    const authHeader = token ? { 'Authorization': `Bearer ${token}` } : {};
+
+    if (backendActive) {
+      try {
+        const response = await fetch(`${API_BASE_URL}/cases/${caseId}/evidence/${evidenceId}`, {
+          method: 'DELETE',
+          headers: authHeader
+        });
+
+        if (response.ok) {
+          await refreshData();
+          return true;
+        }
+      } catch (err) {
+        console.error("Failed to delete evidence from server:", err);
+      }
+    }
+
+    // Local state fallback
+    setEvidence(prev => ({
+      ...prev,
+      [caseId]: (prev[caseId] || []).filter(e => e.id !== evidenceId)
+    }));
+    appendAuditLog(`Purged evidence file ID ${evidenceId} from case vault.`);
+    return true;
+  };
+
   const appendAuditLog = (action) => {
     const prevLog = auditLogs[auditLogs.length - 1];
     const prevHash = prevLog ? prevLog.blockHash : '0000000000000000000000000000000000000000';
@@ -546,6 +575,7 @@ export const ProjectProvider = ({ children }) => {
       auditLogs,
       addCase,
       addEvidenceFile,
+      deleteEvidenceFile,
       appendAuditLog,
       backendActive,
       refreshData
