@@ -99,7 +99,7 @@ const Cases = ({ setCurrentTab }) => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {cases.map((c) => {
           const isSelected = c.id === selectedCaseId;
-          const caseEvList = evidence[c.id] || [];
+          const caseEvList = (evidence && evidence[c.id]) ? evidence[c.id] : [];
 
           return (
             <div 
@@ -229,95 +229,104 @@ const Cases = ({ setCurrentTab }) => {
             </div>
 
             {/* Ingested Evidence Details Section */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
-                  <HardDrive size={14} />
-                  Ingested Evidence Items & SHA-256 Hashes ({evidence[detailModalCase.id]?.length || 0})
-                </h4>
-                {setCurrentTab && (
-                  <button
-                    onClick={() => { setDetailModalCase(null); setCurrentTab('upload'); }}
-                    className="text-[10px] font-bold text-primary hover:underline flex items-center gap-1"
-                  >
-                    <FolderSync size={12} />
-                    <span>+ Ingest New File</span>
-                  </button>
-                )}
-              </div>
+            {(() => {
+              const caseModalEvList = (evidence && detailModalCase && evidence[detailModalCase.id]) ? evidence[detailModalCase.id] : [];
+              const caseModalTimeList = (timeline && detailModalCase && timeline[detailModalCase.id]) ? timeline[detailModalCase.id] : [];
 
-              {evidence[detailModalCase.id] && evidence[detailModalCase.id].length > 0 ? (
-                <div className="border rounded-xl overflow-hidden text-xs bg-background/40">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-border/30 text-muted uppercase text-[9px] border-b font-bold">
-                        <th className="p-3">File Name</th>
-                        <th className="p-3">Type</th>
-                        <th className="p-3">Size</th>
-                        <th className="p-3">SHA-256 Hash</th>
-                        <th className="p-3">Anomalies</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {evidence[detailModalCase.id].map((f) => (
-                        <tr key={f.id} className="border-b last:border-none hover:bg-border/10 transition-colors text-[11px]">
-                          <td className="p-3 font-bold text-foreground font-mono">{f.fileName}</td>
-                          <td className="p-3 text-muted">{f.fileType}</td>
-                          <td className="p-3 font-mono text-muted">{(f.fileSize / (1024 * 1024)).toFixed(2)} MB</td>
-                          <td className="p-3 font-mono text-[9.5px] text-muted select-all break-all">{f.sha256}</td>
-                          <td className="p-3">
-                            {f.anomalies && f.anomalies.length > 0 ? (
-                              <span className="px-2 py-0.5 rounded-full bg-danger/20 text-danger font-bold text-[9px] flex items-center gap-1 w-fit">
-                                <AlertTriangle size={10} />
-                                <span>{f.anomalies.length} Flagged</span>
-                              </span>
-                            ) : (
-                              <span className="px-2 py-0.5 rounded-full bg-success/20 text-success font-bold text-[9px] flex items-center gap-1 w-fit">
-                                <CheckCircle2 size={10} />
-                                <span>Clean</span>
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="p-6 border border-dashed rounded-xl text-center text-xs text-muted space-y-2">
-                  <p>No evidence files uploaded to this case cabinet yet.</p>
-                </div>
-              )}
-            </div>
-
-            {/* Investigation Timeline Log */}
-            <div className="space-y-3">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
-                <FileText size={14} />
-                Chronological Investigation Events ({timeline[detailModalCase.id]?.length || 0})
-              </h4>
-              {timeline[detailModalCase.id] && timeline[detailModalCase.id].length > 0 ? (
-                <div className="space-y-2">
-                  {timeline[detailModalCase.id].map((ev) => (
-                    <div key={ev.id} className="p-3 border rounded-lg bg-background/30 text-xs flex flex-col gap-1">
-                      <div className="flex items-center justify-between text-[10px] text-muted font-mono">
-                        <span>{ev.timestamp.replace('T', ' ').substring(0, 19)} UTC</span>
-                        <span className={`font-bold uppercase px-1.5 py-0.5 rounded ${
-                          ev.severity === 'CRITICAL' ? 'bg-danger/20 text-danger' :
-                          ev.severity === 'HIGH' ? 'bg-warning/20 text-warning' : 'bg-primary/20 text-primary'
-                        }`}>
-                          {ev.severity}
-                        </span>
-                      </div>
-                      <p className="text-foreground font-medium">{ev.description}</p>
-                      <span className="text-[9px] font-mono text-muted">Source: {ev.source}</span>
+              return (
+                <>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
+                        <HardDrive size={14} />
+                        Ingested Evidence Items & SHA-256 Hashes ({caseModalEvList.length})
+                      </h4>
+                      {setCurrentTab && (
+                        <button
+                          onClick={() => { setDetailModalCase(null); setCurrentTab('upload'); }}
+                          className="text-[10px] font-bold text-primary hover:underline flex items-center gap-1"
+                        >
+                          <FolderSync size={12} />
+                          <span>+ Ingest New File</span>
+                        </button>
+                      )}
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-xs text-muted italic">No timeline events recorded.</p>
-              )}
-            </div>
+
+                    {caseModalEvList.length > 0 ? (
+                      <div className="border rounded-xl overflow-hidden text-xs bg-background/40">
+                        <table className="w-full text-left border-collapse">
+                          <thead>
+                            <tr className="bg-border/30 text-muted uppercase text-[9px] border-b font-bold">
+                              <th className="p-3">File Name</th>
+                              <th className="p-3">Type</th>
+                              <th className="p-3">Size</th>
+                              <th className="p-3">SHA-256 Hash</th>
+                              <th className="p-3">Anomalies</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {caseModalEvList.map((f) => (
+                              <tr key={f.id} className="border-b last:border-none hover:bg-border/10 transition-colors text-[11px]">
+                                <td className="p-3 font-bold text-foreground font-mono">{f.fileName}</td>
+                                <td className="p-3 text-muted">{f.fileType}</td>
+                                <td className="p-3 font-mono text-muted">{(f.fileSize / (1024 * 1024)).toFixed(2)} MB</td>
+                                <td className="p-3 font-mono text-[9.5px] text-muted select-all break-all">{f.sha256}</td>
+                                <td className="p-3">
+                                  {f.anomalies && f.anomalies.length > 0 ? (
+                                    <span className="px-2 py-0.5 rounded-full bg-danger/20 text-danger font-bold text-[9px] flex items-center gap-1 w-fit">
+                                      <AlertTriangle size={10} />
+                                      <span>{f.anomalies.length} Flagged</span>
+                                    </span>
+                                  ) : (
+                                    <span className="px-2 py-0.5 rounded-full bg-success/20 text-success font-bold text-[9px] flex items-center gap-1 w-fit">
+                                      <CheckCircle2 size={10} />
+                                      <span>Clean</span>
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="p-6 border border-dashed rounded-xl text-center text-xs text-muted space-y-2">
+                        <p>No evidence files uploaded to this case cabinet yet.</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Investigation Timeline Log */}
+                  <div className="space-y-3">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
+                      <FileText size={14} />
+                      Chronological Investigation Events ({caseModalTimeList.length})
+                    </h4>
+                    {caseModalTimeList.length > 0 ? (
+                      <div className="space-y-2">
+                        {caseModalTimeList.map((ev) => (
+                          <div key={ev.id} className="p-3 border rounded-lg bg-background/30 text-xs flex flex-col gap-1">
+                            <div className="flex items-center justify-between text-[10px] text-muted font-mono">
+                              <span>{ev.timestamp.replace('T', ' ').substring(0, 19)} UTC</span>
+                              <span className={`font-bold uppercase px-1.5 py-0.5 rounded ${
+                                ev.severity === 'CRITICAL' ? 'bg-danger/20 text-danger' :
+                                ev.severity === 'HIGH' ? 'bg-warning/20 text-warning' : 'bg-primary/20 text-primary'
+                              }`}>
+                                {ev.severity}
+                              </span>
+                            </div>
+                            <p className="text-foreground font-medium">{ev.description}</p>
+                            <span className="text-[9px] font-mono text-muted">Source: {ev.source}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted italic">No timeline events recorded.</p>
+                    )}
+                  </div>
+                </>
+              );
+            })()}
 
             {/* Modal Footer Quick Actions */}
             <div className="border-t pt-4 flex flex-wrap items-center justify-between gap-3">

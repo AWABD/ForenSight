@@ -539,6 +539,8 @@ export const ProjectProvider = ({ children }) => {
       selectedCaseId,
       setSelectedCaseId,
       activeCase,
+      evidence,
+      timeline,
       caseEvidence,
       caseTimeline,
       auditLogs,
