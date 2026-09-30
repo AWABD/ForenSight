@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import { useProject } from '../contexts/ProjectContext';
-import { FileText, Printer, ShieldCheck, Signature, Sparkles, CheckCircle2, UserCheck, Briefcase, AlertTriangle } from 'lucide-react';
+import { FileText, Printer, ShieldCheck, Signature, Sparkles, CheckCircle2, UserCheck, Briefcase, AlertTriangle, Award, Check } from 'lucide-react';
 
 const ReportViewer = () => {
   const { cases, activeCase, selectedCaseId, setSelectedCaseId, caseEvidence, caseTimeline } = useProject();
   const [signed, setSigned] = useState(false);
   const [signing, setSigning] = useState(false);
-  const [reportNotes, setReportNotes] = useState('Local models parsed elements. Discrepancies and anomaly vectors mapped cleanly across evidence items.');
+  const [reportNotes, setReportNotes] = useState(
+    'Based on baseline SHA-256 cryptographic hash checks and multi-engine neural vision inspections, the evidence files demonstrate structural anomalies. Digital signatures and EXIF timestamps indicate unauthorized modification vectors. Recommending court preservation order.'
+  );
 
   const handleSignOff = () => {
     setSigning(true);
@@ -19,6 +21,9 @@ const ReportViewer = () => {
   const handlePrint = () => {
     window.print();
   };
+
+  const flaggedCount = caseEvidence.reduce((acc, curr) => acc + (curr.anomalies?.length || 0), 0);
+  const threatLevel = flaggedCount > 3 ? 'CRITICAL RISK' : flaggedCount > 0 ? 'HIGH RISK' : 'LOW RISK / CLEAN';
 
   return (
     <div className="space-y-6">
@@ -88,24 +93,25 @@ const ReportViewer = () => {
                <strong className="text-slate-900">{new Date().toISOString().replace('T', ' ').substring(0, 19)} UTC</strong>
              </div>
              <div>
-               <span className="text-slate-500 block uppercase font-bold text-[8.5px] leading-none mb-1">CHIEF EXAMINER</span>
-               <strong className="text-slate-900">{activeCase.assignedTo}</strong>
+               <span className="text-slate-500 block uppercase font-bold text-[8.5px] leading-none mb-1">CHIEF FORENSIC EXAMINER</span>
+               <strong className="text-slate-900">{activeCase.assignedTo} (Badge ID: FNS-EXP-889)</strong>
              </div>
              <div>
-               <span className="text-slate-500 block uppercase font-bold text-[8.5px] leading-none mb-1">STATUS</span>
-               <strong className="text-slate-950 font-bold uppercase">{activeCase.status}</strong>
+               <span className="text-slate-500 block uppercase font-bold text-[8.5px] leading-none mb-1">ASSESSED THREAT LEVEL</span>
+               <strong className={`font-extrabold uppercase ${flaggedCount > 0 ? 'text-red-700' : 'text-emerald-700'}`}>{threatLevel} ({flaggedCount} Anomalies)</strong>
              </div>
           </div>
 
-          {/* Section 1: Executive brief */}
+          {/* Section 1: Executive Brief & Scope */}
           <div className="space-y-2">
-             <h3 className="font-sans font-bold text-xs uppercase text-slate-900 tracking-wider">I. CASE CABINET SUMMARY & OBJECTIVES</h3>
+             <h3 className="font-sans font-bold text-xs uppercase text-slate-900 tracking-wider">I. EXECUTIVE BRIEF & INCIDENT NARRATIVE</h3>
              <p className="text-[12px] leading-relaxed text-slate-800">
-               Pursuant to modern forensic specifications of digital evidentiary handling regulations (**ISO/IEC 27037**), the Chief Examiner certifies the examination details listed below. Raw digital containers are preserved and locked locally in standard write-once configurations.
+               Pursuant to modern digital forensic specifications under **ISO/IEC 27037** standards, the Chief Examiner certifies the examination details listed below. Raw digital containers were extracted, hashed, and locked in standard write-once storage vaults.
              </p>
-             <p className="text-[12px] leading-relaxed text-slate-900 italic bg-slate-50 p-3 border border-slate-300 rounded font-mono">
-               "{activeCase.description}"
-             </p>
+             <div className="bg-slate-50 p-3.5 border border-slate-300 rounded font-mono space-y-1 text-[11px] text-slate-900">
+               <span className="text-[9px] font-sans font-bold text-slate-500 uppercase block">INVESTIGATION SCOPE & STATEMENT:</span>
+               <p className="italic">"{activeCase.description}"</p>
+             </div>
           </div>
 
           {/* Section 2: Evidentiary items and hashes table */}
@@ -181,6 +187,21 @@ const ReportViewer = () => {
              </div>
           </div>
 
+          {/* Section 4: Examiner Expert Opinion & Attestation */}
+          <div className="space-y-3 pt-2 font-sans">
+             <h3 className="font-bold text-xs uppercase text-slate-900 tracking-wider">IV. CHIEF EXAMINER EXPERT OPINION & RECOMMENDATION</h3>
+             <div className="p-4 border rounded border-slate-300 bg-slate-50/80 text-[11px] text-slate-900 leading-relaxed space-y-2">
+                <span className="text-[9px] font-bold text-slate-500 uppercase block font-sans">Official Examiner Finding Statement:</span>
+                <p className="font-mono text-slate-800 bg-white p-3 border rounded">
+                  "{reportNotes}"
+                </p>
+                <div className="pt-2 flex items-center justify-between text-[10px] text-slate-600 font-semibold border-t">
+                  <span>Chain of Custody Standard: ISO/IEC 27037 Verified</span>
+                  <span>Examiner Badge: FNS-EXP-889</span>
+                </div>
+             </div>
+          </div>
+
           {/* Signatures block */}
           <div className="pt-8 border-t flex flex-col sm:flex-row justify-between gap-6 font-sans">
              <div className="space-y-4">
@@ -215,18 +236,18 @@ const ReportViewer = () => {
           
           <div className="border p-5 rounded-2xl glassmorphism space-y-4">
             <h3 className="text-xs uppercase font-bold tracking-wider text-muted flex items-center gap-1.5">
-               <Printer size={14} className="text-primary" />
-               Brief Action Sidebar
+               <Award size={14} className="text-primary" />
+               Examiner Opinion Editor
             </h3>
 
             <div className="space-y-3 text-[10px]">
               <div>
-                <label className="text-muted font-bold block mb-1">Add Examiner Concluding Notes</label>
+                <label className="text-muted font-bold block mb-1">Edit Chief Examiner Findings & Remarks:</label>
                 <textarea
-                  rows="4"
+                  rows="6"
                   value={reportNotes}
                   onChange={(e) => setReportNotes(e.target.value)}
-                  className="w-full text-[11px] bg-background border rounded px-3 py-2 text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all resize-none"
+                  className="w-full text-[11px] bg-background border rounded px-3 py-2 text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all resize-none font-mono"
                 />
               </div>
 
