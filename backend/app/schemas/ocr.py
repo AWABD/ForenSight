@@ -19,6 +19,7 @@ class OCRTextOut(BaseModel):
     page_number: int
     extracted_text: str
     bounding_boxes: Optional[List[Any]] = None
+    extracted_data: Optional[Dict[str, Any]] = None
     confidence_score: Optional[float] = None
     scanned_at: datetime
 

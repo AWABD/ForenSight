@@ -12,6 +12,7 @@ class OCRText(Base):
     page_number = Column(Integer, default=1, nullable=False)
     extracted_text = Column(Text, nullable=False)
     bounding_boxes = Column(JSON, nullable=True)
+    extracted_data = Column(JSON, nullable=True)
     confidence_score = Column(Float, nullable=True)
     scanned_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 

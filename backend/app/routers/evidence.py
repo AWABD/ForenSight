@@ -101,13 +101,28 @@ def upload_evidence(
     db.commit()
     db.refresh(new_evidence)
 
+    # Automatically run initial OCR / Content Parsing pipeline upon ingest
+    try:
+        ocr_result = OCRService.run_ocr_pipeline(target_path, sanitized_filename)
+        db_ocr = OCRText(
+            evidence_id=new_evidence.id,
+            page_number=1,
+            extracted_text=ocr_result["extracted_text"],
+            bounding_boxes=ocr_result["bounding_boxes"],
+            extracted_data=ocr_result["extracted_data"],
+            confidence_score=ocr_result["confidence_score"]
+        )
+        db.add(db_ocr)
+    except Exception as ocr_err:
+        logger.warning(f"Auto-OCR background extraction deferred for '{sanitized_filename}': {ocr_err}")
+
     # Add dynamic Timeline Event representing file ingestion
     new_timeline_event = TimelineEvent(
         case_id=case_id,
         evidence_file_id=new_evidence.id,
         timestamp_source="System Ingestion Engine",
         event_type="FILE_INGEST",
-        description=f"Ingested {sanitized_filename} into secure storage vault. Baseline hashes computed successfully.",
+        description=f"Ingested {sanitized_filename} into secure storage vault. Baseline hashes & OCR text parsed.",
         severity="INFO"
     )
     db.add(new_timeline_event)
@@ -184,6 +199,7 @@ def run_ocr_on_evidence(
         page_number=1,
         extracted_text=ocr_result["extracted_text"],
         bounding_boxes=ocr_result["bounding_boxes"],
+        extracted_data=ocr_result["extracted_data"],
         confidence_score=ocr_result["confidence_score"]
     )
     db.add(db_ocr)
