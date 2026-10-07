@@ -6,6 +6,8 @@ from app.config import settings
 # In order to support running verification/tests out of the box even if local PG is down,
 # we can support fallback to SQLite for local development, but default to settings.DATABASE_URL.
 db_url = settings.DATABASE_URL
+if db_url.startswith("postgres://"):
+    db_url = db_url.replace("postgres://", "postgresql://", 1)
 
 # For SQLite, use connect_args to allow multithreading access
 connect_args = {}
