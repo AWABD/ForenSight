@@ -1,0 +1,178 @@
+================================================================================
+              FORENSIGHT AI PLATFORM - COMPREHENSIVE SYSTEM DOCUMENTATION
+================================================================================
+Platform Name   : ForenSight AI-Powered Digital Evidence Investigation Platform
+Standards       : ISO/IEC 27037 Compliant (Digital Evidence Handling & Chain of Custody)
+Architecture    : Full-Stack Decoupled Micro-Architecture (React + FastAPI + Supabase)
+Deployment      : Vercel (Frontend) | Render (Backend) | Supabase (Cloud PostgreSQL)
+
+================================================================================
+1. PROJECT OVERVIEW & CORE OBJECTIVES
+================================================================================
+ForenSight is an enterprise-grade digital forensics, evidentiary content parsing,
+and investigation management platform designed for law enforcement, judicial 
+examiners, and legal auditors.
+
+Key Capabilities:
+1. Multi-Format Evidence Ingestion: Extracts and parses raw text, tabular data, 
+   numerical tokens, dates, and metadata from images (JPG, PNG, WEBP), PDFs, 
+   Word documents (DOCX), logs (LOG, TXT), spreadsheets (CSV, JSON), databases 
+   (SQLite, DB), and binary payloads.
+2. Dual-Engine Neural OCR: Parallel execution of PyTorch EasyOCR and PaddlePaddle 
+   PaddleOCR for character recognition, text interpolation, and side-by-side 
+   confidence/speed benchmarking.
+3. Cryptographic Hash Validation: Computes baseline SHA-256 and SHA-3 hashes 
+   upon ingestion to guarantee data integrity and satisfy ISO/IEC 27037 standards.
+4. Role-Based Clearance (RBAC): Enforces strict 4-level clearance hierarchy:
+   - Level 4: SysAdmin (Full administrative rights, evidence purging, user approval)
+   - Level 3: LeadInvestigator (Case creation, asset assignment, report signing)
+   - Level 2: Analyst (Evidence inspection, OCR scanning, anomaly tracking)
+   - Level 1: LegalAuditor (Read-only oversight & Chain of Custody audit verification)
+5. Admissible Judicial Report Briefs: Generates broad, court-admissible PDF reports 
+   complete with baseline hashes, extracted text/tables, chronological anomaly logs, 
+   dynamic chief examiner findings, and digital RSA-2048 certificate seals.
+
+================================================================================
+2. SYSTEM ARCHITECTURE & TECH STACK
+================================================================================
+FRONTEND (React 18 / Vite / Tailwind CSS v4)
+--------------------------------------------------------------------------------
+- Framework          : React 18 with Vite build pipeline
+- Styling            : Tailwind CSS v4 + Glassmorphism Cyber-Forensic theme
+- State Management   : React Context API (`ProjectContext.jsx`)
+- Icons & UI Kits    : Lucide React Icons, Recharts Data Visualization
+- Print System       : Isolated `@media print` CSS rules hiding UI chrome
+- Hosted Environment : Vercel (Production: https://foren-sight.vercel.app)
+
+BACKEND (Python 3.10+ / FastAPI / SQLAlchemy)
+--------------------------------------------------------------------------------
+- Framework          : FastAPI (Asynchronous Python Web Server)
+- Server Engine      : Uvicorn ASGI Server
+- ORM Database       : SQLAlchemy 2.0 with PostgreSQL psycopg3 drivers
+- Authentication     : PyJWT (JSON Web Tokens) with SHA-256 Refresh Token Rotation
+- Password Security  : Passlib + Bcrypt hashing
+- Rate Limiting      : Custom Token-Bucket Rate Limiter (5 requests/min on auth)
+- Hosted Environment : Render (Production: https://forensight-api.onrender.com)
+
+DATABASE (Supabase Cloud PostgreSQL)
+--------------------------------------------------------------------------------
+- Engine             : Cloud PostgreSQL 15+
+- Provider           : Supabase (Host: aws-0-ap-northeast-2.pooler.supabase.com)
+- Main Tables        :
+  1. `users`            : Credentials, clearance roles, registration approval status.
+  2. `cases`            : Active case cabinets, reference numbers, objectives.
+  3. `evidence_files`   : Uploaded evidence signatures, SHA-256 hashes, file sizes.
+  4. `ocr_text`         : Extracted text, isolated numbers, dates, tables, confidence.
+  5. `timeline_events`  : Chronological forensic logs and severity anomaly badges.
+  6. `audit_logs`       : Cryptographic Chain of Custody ledger blocks.
+
+================================================================================
+3. DETAILED MODULE & SECTION BREAKDOWN
+================================================================================
+
+--------------------------------------------------------------------------------
+MODULE A: AUTHENTICATION & ACCESS CLEARANCE (`/api/v1/auth`, `Login.jsx`, `Register.jsx`)
+--------------------------------------------------------------------------------
+- Functionality: Controls user access based on role clearance levels.
+- Registration Workflow: New registrants generate a secret registration code
+  (e.g., `FNS-REG-9A2C`). Accounts remain in PENDING status until approved by a 
+  Level 4 SysAdmin.
+- Token Management: Short-lived Access Tokens (30 min) and long-lived Refresh 
+  Tokens (7 days) with silent automatic token rotation on 401 response interceptors.
+
+--------------------------------------------------------------------------------
+MODULE B: FORENSIC DASHBOARD (`Dashboard.jsx`)
+--------------------------------------------------------------------------------
+- Functionality: Command center displaying high-level system metrics.
+- Key Metrics Cards: Total Evidence Files, Active Case Cabinets, Hash Integrity
+  Verification Rate, Assessed Flagged Anomalies.
+- Real-Time Feed: Shows latest ingested evidence files, system health status, and 
+  quick-action navigation links to Reports and Cases.
+
+--------------------------------------------------------------------------------
+MODULE C: CASE CABINET MANAGER (`Cases.jsx`)
+--------------------------------------------------------------------------------
+- Functionality: Manages case files and investigation objectives.
+- Actions: Create new case cabinets, assign Lead Investigators, set reference numbers 
+  (e.g., `REF-83893-IND`), and define scope statements.
+- Case Cabinet Detail Modal: View case evidence counts, anomaly rates, and attached 
+  evidence inventories.
+
+--------------------------------------------------------------------------------
+MODULE D: MULTI-FORMAT EVIDENCE EXAMINER (`EvidenceViewer.jsx`)
+--------------------------------------------------------------------------------
+- Functionality: Core inspection laboratory for digital evidence files.
+- Viewing Modes:
+  1. Standard View: Signature metadata, file size, SHA-256 & SHA-3 hashes, ISO/IEC 
+     27037 integrity badge, and Level 4 SysAdmin file purging button.
+  2. Hex Viewer: Raw hexadecimal offset inspection (e.g., `00000000: 45 56 49 44...`).
+  3. Metadata Inspection: EXIF geotags (GPS Latitude/Longitude), camera details, and
+     creation timestamps.
+  4. Multi-Engine OCR Scanner:
+     - EasyOCR (PyTorch) & PaddleOCR (PaddlePaddle) execution comparison.
+     - Extracted Text Payload display with 1-click copy.
+     - Isolated Numerical Tokens (account balances, IP addresses, port numbers).
+     - Isolated Temporal References (dates, timestamps).
+     - Tabular Grid Matrix Extraction (rows and column headers).
+
+--------------------------------------------------------------------------------
+MODULE E: CHRONOLOGICAL TIMELINE ENGINE (`Timeline.jsx`)
+--------------------------------------------------------------------------------
+- Functionality: Maps all forensic events, AI inferences, and hash checks chronologically.
+- Event Categories: `AI_INFERENCE`, `HASH_VERIFICATION`, `FILE_INGESTION`, `SECURITY_ANOMALY`.
+- Severity Ratings: `CRITICAL` (Red), `HIGH` (Amber), `INFO` (Blue).
+
+--------------------------------------------------------------------------------
+MODULE F: CHAIN OF CUSTODY AUDIT VAULT (`AuditLogs.jsx`)
+--------------------------------------------------------------------------------
+- Functionality: Maintains an unalterable audit ledger of all user actions.
+- Features: Tracks operator IDs, action types, timestamps, and target evidence IDs.
+- Chain Integrity Verification: Performs automated cryptographic block hash checks 
+  to ensure ledger records have not been tampered with.
+
+--------------------------------------------------------------------------------
+MODULE G: JUDICIAL BRIEF & REPORT MANAGER (`ReportViewer.jsx`)
+--------------------------------------------------------------------------------
+- Functionality: Generates court-admissible forensic briefs and PDF exports.
+- Report Sections:
+  - Header Seal & Case Reference Metadata
+  - Section I   : Executive Brief & Investigation Scope Statement
+  - Section II  : Ingested Asset Vault & Baseline SHA-256 Hash Matrix
+  - Section III : Extracted Evidentiary Content & AI OCR Intelligence Matrix
+  - Section IV  : Chronological Anomaly Metric Logs
+  - Section V   : Chief Examiner Technical Finding & Expert Opinion Statement
+  - Section VI  : RSA-2048 Digital Certificate Seal & Signature Verification
+- Print Isolation: Uses custom `@media print` CSS to suppress UI elements (Navbar, 
+  Sidebar, buttons) and export only the clean document brief to PDF.
+
+--------------------------------------------------------------------------------
+MODULE H: ADMIN SYSTEM CONTROLS (`Admin.jsx`)
+--------------------------------------------------------------------------------
+- Functionality: System administration console (Level 4 SysAdmin only).
+- Features: Approve pending user clearance requests, view active examiner roster, 
+  inspect local GPU/CPU hardware parameters, and test database connectivity.
+
+================================================================================
+4. HOW TO LAUNCH & RUN THE SYSTEM
+================================================================================
+
+ONE-CLICK LAUNCHER (RECOMMENDED FOR LOCAL SYSTEM EXECUTION)
+--------------------------------------------------------------------------------
+1. Open Command Prompt (CMD) in the project root directory.
+2. Run the single launcher script:
+   python start_forensight.py
+
+This automatically:
+- Starts FastAPI Backend on http://127.0.0.1:8000
+- Starts React Frontend on http://localhost:5173
+- Opens the default browser to http://localhost:5173
+
+DEFAULT LOCAL LOGIN CREDENTIALS:
+--------------------------------------------------------------------------------
+- Username       : admin_root
+- Password       : sysadminsecret
+- Clearance Level: SysAdmin (Level 4)
+
+================================================================================
+                                END OF DOCUMENT
+================================================================================
