@@ -279,12 +279,56 @@ export const ProjectProvider = ({ children }) => {
   
   // Real-time synchronization loader
   const refreshData = async () => {
-    const token = localStorage.getItem('token');
-    const authHeader = token ? { 'Authorization': `Bearer ${token}` } : {};
+    let token = localStorage.getItem('token');
+    
+    // If no token exists, running in high-fidelity mock mode without throwing 401 console spams
+    if (!token) {
+      setBackendActive(false);
+      return;
+    }
+
+    let authHeader = { 'Authorization': `Bearer ${token}` };
 
     try {
       // 1. Fetch Cases
-      const casesRes = await fetch(`${API_BASE_URL}/cases/`, { headers: authHeader });
+      let casesRes = await fetch(`${API_BASE_URL}/cases/`, { headers: authHeader });
+
+      // Handle token expiration (401 Unauthorized) with silent refresh
+      if (casesRes.status === 401) {
+        const refreshToken = localStorage.getItem('refreshToken');
+        if (refreshToken) {
+          try {
+            const refreshRes = await fetch(`${API_BASE_URL}/auth/refresh`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ refresh_token: refreshToken })
+            });
+
+            if (refreshRes.ok) {
+              const refreshData = await refreshRes.json();
+              token = refreshData.access_token;
+              localStorage.setItem('token', token);
+              if (refreshData.refresh_token) {
+                localStorage.setItem('refreshToken', refreshData.refresh_token);
+              }
+              authHeader = { 'Authorization': `Bearer ${token}` };
+              // Retry fetching cases with rotated token
+              casesRes = await fetch(`${API_BASE_URL}/cases/`, { headers: authHeader });
+            }
+          } catch (rErr) {
+            console.warn("Silent token refresh failed. Revoking stale session.");
+          }
+        }
+
+        if (!casesRes.ok) {
+          // Token expired or invalid and refresh failed: clear stale tokens
+          localStorage.removeItem('token');
+          localStorage.removeItem('refreshToken');
+          setBackendActive(false);
+          return;
+        }
+      }
+
       if (!casesRes.ok) throw new Error("API Offline or unauthorized");
       
       const rawCases = await casesRes.json();
@@ -374,7 +418,6 @@ export const ProjectProvider = ({ children }) => {
       }
 
     } catch (err) {
-      console.warn("FastAPI service offline. Running in high-fidelity mock Sandbox mode.");
       setBackendActive(false);
     }
   };

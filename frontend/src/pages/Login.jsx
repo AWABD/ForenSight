@@ -72,6 +72,9 @@ const Login = ({ onLoginSuccess, onGoToRegister }) => {
     .then((data) => {
       setLoading(false);
       localStorage.setItem('token', data.access_token);
+      if (data.refresh_token) {
+        localStorage.setItem('refreshToken', data.refresh_token);
+      }
       localStorage.setItem('user', JSON.stringify(data.user));
       onLoginSuccess();
     })
