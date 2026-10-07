@@ -7,6 +7,8 @@ import {
   Trash2, Lock
 } from 'lucide-react';
 
+const isUUID = (str) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str || '');
+
 // Sub-component for the OCR Examiner & Comparison Module
 const EvidenceOCRPanel = ({ selectedFile, selectedCaseId, backendActive }) => {
   const [scanning, setScanning] = useState(false);
@@ -17,7 +19,7 @@ const EvidenceOCRPanel = ({ selectedFile, selectedCaseId, backendActive }) => {
   // Fetch existing OCR scan results when selected file changes
   useEffect(() => {
     setOcrData(null);
-    if (backendActive && selectedCaseId && selectedFile?.id) {
+    if (backendActive && isUUID(selectedCaseId) && isUUID(selectedFile?.id)) {
       const token = localStorage.getItem('token');
       const authHeader = token ? { 'Authorization': `Bearer ${token}` } : {};
       
@@ -90,7 +92,7 @@ const EvidenceOCRPanel = ({ selectedFile, selectedCaseId, backendActive }) => {
     const authHeader = token ? { 'Authorization': `Bearer ${token}` } : {};
 
     try {
-      if (backendActive && selectedCaseId && selectedFile?.id) {
+      if (backendActive && isUUID(selectedCaseId) && isUUID(selectedFile?.id)) {
         const response = await fetch(`${API_BASE_URL}/cases/${selectedCaseId}/evidence/${selectedFile.id}/ocr`, {
           method: 'POST',
           headers: {
@@ -428,7 +430,7 @@ const EvidenceViewer = () => {
   // Fetch extracted OCR / Content record on evidence file change
   useEffect(() => {
     setFileExtractedData(null);
-    if (backendActive && selectedCaseId && selectedFile?.id) {
+    if (backendActive && isUUID(selectedCaseId) && isUUID(selectedFile?.id)) {
       const token = localStorage.getItem('token');
       const authHeader = token ? { 'Authorization': `Bearer ${token}` } : {};
 
