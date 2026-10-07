@@ -54,6 +54,14 @@ def migrate_database(db_engine):
                 conn.execute(text("ALTER TABLE users ADD COLUMN username VARCHAR(100) UNIQUE"))
                 conn.execute(text("ALTER TABLE users ADD COLUMN generated_passphrase VARCHAR(255)"))
                 conn.execute(text("ALTER TABLE users ALTER COLUMN email DROP NOT NULL"))
+
+            # Check for ocr_text extracted_data column
+            res_ocr_data = conn.execute(text(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name='ocr_text' AND column_name='extracted_data'"
+            )).fetchone()
+            if not res_ocr_data:
+                conn.execute(text("ALTER TABLE ocr_text ADD COLUMN extracted_data JSON"))
         else:
             # SQLite fallback
             res = conn.execute(text("PRAGMA table_info(users)")).fetchall()
@@ -65,6 +73,11 @@ def migrate_database(db_engine):
             if "username" not in columns:
                 conn.execute(text("ALTER TABLE users ADD COLUMN username VARCHAR(100) UNIQUE"))
                 conn.execute(text("ALTER TABLE users ADD COLUMN generated_passphrase VARCHAR(255)"))
+
+            res_ocr = conn.execute(text("PRAGMA table_info(ocr_text)")).fetchall()
+            ocr_cols = [r[1] for r in res_ocr]
+            if "extracted_data" not in ocr_cols:
+                conn.execute(text("ALTER TABLE ocr_text ADD COLUMN extracted_data JSON"))
 
         # 2. Database Pre-seeding
         seeds = [

@@ -247,7 +247,11 @@ def get_ocr_records(
     if not evidence:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evidence file not found")
         
-    return db.query(OCRText).filter(OCRText.evidence_id == evidence_id).all()
+    try:
+        return db.query(OCRText).filter(OCRText.evidence_id == evidence_id).all()
+    except Exception as e:
+        logger.error(f"Failed to query OCR records for evidence '{evidence_id}': {e}")
+        return []
 
 @router.delete("/{evidence_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_evidence(
