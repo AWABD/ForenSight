@@ -99,3 +99,39 @@ html {
 .neon-glow-danger {
   box-shadow: 0 0 15px rgba(239, 68, 68, 0.25);
 }
+
+/* Print Styles for Court-Admissible Forensic Briefs */
+@media print {
+  body * {
+    visibility: hidden !important;
+  }
+  
+  .printable-report, .printable-report * {
+    visibility: visible !important;
+  }
+  
+  .printable-report {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 24px !important;
+    background: #ffffff !important;
+    color: #020617 !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  .printable-report table {
+    width: 100% !important;
+  }
+
+  .printable-report tr, 
+  .printable-report .space-y-3,
+  .printable-report .space-y-4 {
+    page-break-inside: avoid;
+  }
+}
+

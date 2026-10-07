@@ -208,7 +208,7 @@ const ReportViewer = () => {
       <div className={`grid grid-cols-1 ${fullWidthMode ? 'w-full' : 'lg:grid-cols-4'} gap-6`}>
         
         {/* Broad Document Container */}
-        <div className={`${fullWidthMode ? 'w-full max-w-5xl mx-auto' : 'lg:col-span-3'} border p-8 md:p-12 rounded-2xl bg-white text-slate-950 shadow-2xl space-y-8 font-serif print:border-none print:shadow-none print:p-0 print:max-w-none`}>
+        <div className={`printable-report ${fullWidthMode ? 'w-full max-w-5xl mx-auto' : 'lg:col-span-3'} border p-8 md:p-12 rounded-2xl bg-white text-slate-950 shadow-2xl space-y-8 font-serif print:border-none print:shadow-none print:p-0 print:max-w-none`}>
           
           {/* Header Banner Seal */}
           <div className="border-b-4 border-slate-950 pb-6 text-center space-y-2 font-sans">
