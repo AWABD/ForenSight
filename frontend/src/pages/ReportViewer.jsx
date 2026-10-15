@@ -4,7 +4,7 @@ import { API_BASE_URL } from '../config';
 import { 
   FileText, Printer, ShieldCheck, Signature, Sparkles, CheckCircle2, 
   UserCheck, Briefcase, AlertTriangle, Award, Check, Maximize2, Minimize2, Edit3, Shield,
-  Database, Calendar, Hash, BarChart3, Loader2, Search, Cpu
+  Database, Calendar, Hash, BarChart3, Loader2, Search, Cpu, Tag, Clock, IndianRupee, User, AlertCircle
 } from 'lucide-react';
 
 const isUUID = (str) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str || '');
@@ -67,18 +67,14 @@ const ReportViewer = () => {
 
     caseEvidence.forEach(file => {
       const ocrRec = extractedEvidenceMap[file.id];
-      const text = ocrRec?.extracted_text || (
-        file.fileName.toLowerCase().includes('tamper') || file.fileName.toLowerCase().includes('log')
-          ? `EVIDENTIARY TEXT EXTRACTION [${file.fileName}]. CONFIDENTIAL STAFF RECORDS. Employee ID: FNS-993. Clearance Level 4. Modified date: 2026-07-30. Account balances cleared: $142,390. Server database connection ports: 5432, 8080. SQL query returned: 12 table records deleted.`
-          : file.fileName.toLowerCase().includes('exif') || file.fileName.toLowerCase().includes('jpg') || file.fileName.toLowerCase().includes('png')
-          ? `TOP SECRET GPS COORDINATE VECTOR DETECTED [${file.fileName}]. Latitude: 28.6139, Longitude: 77.2090. Target name: New Delhi Workstation. Remote client sync date: 2026-07-28 08:12:00.`
-          : `FORENSIC DIGITAL EVIDENCE PAYLOAD [${file.fileName}]. SHA-256 Digest Verified. Ingestion Log: 2026-08-01 10:14:02. Connection sockets: Port 8080, Port 22.`
-      );
+      const text = ocrRec?.extracted_text || '';
 
       if (text) {
         combinedTextSnippet += `\n- [${file.fileName}]: ${text.substring(0, 180)}...`;
-        (text.match(/\b\d+(?:\.\d+)?\b/g) || []).slice(0, 5).forEach(n => allNumbers.add(n));
-        (text.match(/\b\d{4}[-/]\d{2}[-/]\d{2}\b|\b\d{2}[-/]\d{2}[-/]\d{4}\b/g) || []).slice(0, 3).forEach(d => allDates.add(d));
+        const fileNumbers = ocrRec?.extracted_data?.numbers || (text.match(/\b\d+(?:\.\d+)?\b/g) || []).slice(0, 5);
+        const fileDates = ocrRec?.extracted_data?.dates || (text.match(/\b\d{4}[-/]\d{2}[-/]\d{2}\b|\b\d{2}[-/]\d{2}[-/]\d{4}\b/g) || []).slice(0, 3);
+        fileNumbers.forEach(n => allNumbers.add(n));
+        fileDates.forEach(d => allDates.add(d));
       }
     });
 
@@ -329,105 +325,203 @@ const ReportViewer = () => {
              {caseEvidence.length > 0 ? (
                <div className="space-y-4">
                  {caseEvidence.map(file => {
-                   const ocrRec = extractedEvidenceMap[file.id];
-                   const extractedText = ocrRec?.extracted_text || (
-                     file.fileName.toLowerCase().includes('tamper') || file.fileName.toLowerCase().includes('log')
-                       ? `EVIDENTIARY TEXT EXTRACTION [${file.fileName}]. CONFIDENTIAL STAFF RECORDS. Employee ID: FNS-993. Clearance Rank: Level 4. Last modified date: 2026-07-30. Account balances cleared: $142,390. Server database connection ports: 5432, 8080. SQL query returned: 12 table records deleted.`
-                       : file.fileName.toLowerCase().includes('exif') || file.fileName.toLowerCase().includes('jpg') || file.fileName.toLowerCase().includes('png')
-                       ? `TOP SECRET GPS COORDINATE VECTOR DETECTED [${file.fileName}]. Latitude: 28.6139, Longitude: 77.2090. Target name: New Delhi Workstation. Remote client sync date: 2026-07-28 08:12:00.`
-                       : `FORENSIC DIGITAL EVIDENCE PAYLOAD [${file.fileName}]. SHA-256 Digest Verified. System Ingestion Log: 2026-08-01 10:14:02. Connection sockets: Port 8080, Port 22.`
-                   );
+                    const ocrRec = extractedEvidenceMap[file.id];
+                    const hasOCR = !!ocrRec && !!ocrRec.extracted_text;
+                    const extractedText = ocrRec?.extracted_text || '';
+                    const data = ocrRec?.extracted_data || {};
+                    const dates = data.dates || [];
+                    const times = data.times || [];
+                    const amounts = data.amounts || [];
+                    const people = data.people || [];
+                    const ids = data.ids || [];
+                    const upiIds = data.upi_ids || [];
+                    const banking = data.banking_details || [];
+                    const statusSignals = data.status_signals || [];
+                    const uncertain = data.uncertain_extractions || [];
+                    const tables = data.tables || [];
+                    const fileSha256 = data.file_sha256 || file.hash || '';
+                    const confidence = typeof ocrRec?.confidence_score === 'number' ? ocrRec.confidence_score : null;
 
-                   const numbers = ocrRec?.extracted_data?.numbers || Array.from(new Set((extractedText.match(/\b\d+(?:\.\d+)?\b/g) || []).slice(0, 8)));
-                   const dates = ocrRec?.extracted_data?.dates || Array.from(new Set((extractedText.match(/\b\d{4}[-/]\d{2}[-/]\d{2}\b|\b\d{2}[-/]\d{2}[-/]\d{4}\b/g) || []).slice(0, 5)));
-                   const tables = ocrRec?.extracted_data?.tables || [
-                     {
-                       headers: ["Forensic Parameter", "Extracted Symbol", "Engine Confidence"],
-                       rows: [
-                         ["File Target", file.fileName, `${(ocrRec?.confidence_score || 96.5).toFixed(1)}%`],
-                         ["Extraction Pipeline", "Multi-Engine Neural Vision (EasyOCR & PaddleOCR)", "98.4%"]
-                       ]
-                     }
-                   ];
+                    return (
+                      <div key={file.id} className="p-4 border border-slate-300 rounded-xl bg-slate-50 space-y-3 font-sans text-xs">
+                        <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                          <div className="flex items-center gap-2">
+                            <FileText size={14} className="text-slate-700" />
+                            <span className="font-extrabold text-slate-950 font-mono text-sm">{file.fileName}</span>
+                            <span className="bg-slate-200 text-slate-800 text-[9px] font-bold px-2 py-0.5 rounded uppercase font-mono">{file.fileType}</span>
+                          </div>
+                          {confidence !== null ? (
+                            <span className="text-[10px] font-mono font-extrabold text-blue-700 bg-blue-100 border border-blue-200 px-2.5 py-0.5 rounded">
+                              OCR Mean Confidence: {confidence.toFixed(1)}%
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-mono text-slate-400 bg-slate-200 px-2.5 py-0.5 rounded">
+                              OCR Not Executed
+                            </span>
+                          )}
+                        </div>
 
-                   return (
-                     <div key={file.id} className="p-4 border border-slate-300 rounded-xl bg-slate-50 space-y-3 font-sans text-xs">
-                       <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                         <div className="flex items-center gap-2">
-                           <FileText size={14} className="text-slate-700" />
-                           <span className="font-extrabold text-slate-950 font-mono text-sm">{file.fileName}</span>
-                           <span className="bg-slate-200 text-slate-800 text-[9px] font-bold px-2 py-0.5 rounded uppercase font-mono">{file.fileType}</span>
-                         </div>
-                         <span className="text-[10px] font-mono font-extrabold text-slate-600 bg-slate-200 px-2.5 py-0.5 rounded">
-                           AI Confidence: {(ocrRec?.confidence_score || 96.5).toFixed(1)}%
-                         </span>
-                       </div>
+                        {/* File SHA-256 Cryptographic Hash */}
+                        {fileSha256 && (
+                          <div className="p-2 bg-slate-100 border border-slate-200 rounded-lg flex items-center justify-between font-mono text-[10px]">
+                            <span className="text-slate-500 font-bold uppercase flex items-center gap-1.5">
+                              <Shield size={11} className="text-slate-700" /> File SHA-256 (Cryptographic Hash):
+                            </span>
+                            <span className="text-slate-900 font-bold select-all tracking-wider">{fileSha256}</span>
+                          </div>
+                        )}
 
-                       {/* Extracted Text Snippet */}
-                       <div>
-                         <span className="text-[9px] font-black uppercase text-slate-500 block mb-1">Extracted Text Content Payload:</span>
-                         <p className="p-3 bg-white border border-slate-200 rounded-lg text-[11px] font-mono leading-relaxed text-slate-900 select-all break-words">
-                           {extractedText}
-                         </p>
-                       </div>
+                        {/* Extracted Text Snippet */}
+                        <div>
+                          <span className="text-[9px] font-black uppercase text-slate-500 block mb-1">Raw Extracted Text (Actual OCR Output):</span>
+                          {hasOCR ? (
+                            <p className="p-3 bg-white border border-slate-200 rounded-lg text-[11px] font-mono leading-relaxed text-slate-900 select-all whitespace-pre-wrap break-words">
+                              {extractedText}
+                            </p>
+                          ) : (
+                            <p className="p-3 bg-white border border-slate-200 border-dashed rounded-lg text-[11px] font-mono italic text-slate-400">
+                              No OCR scan executed yet for this evidence file. Open the Evidence Workspace to run genuine PaddleOCR & EasyOCR analysis.
+                            </p>
+                          )}
+                        </div>
 
-                       {/* Numbers & Dates Sub-Grid */}
-                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-                         {/* Isolated Numbers */}
-                         <div className="p-2.5 bg-white border border-slate-200 rounded-lg space-y-1">
-                           <span className="text-[8.5px] font-black uppercase text-slate-500 block flex items-center gap-1">
-                             <BarChart3 size={10} /> Isolated Numerical Tokens:
-                           </span>
-                           <div className="flex flex-wrap gap-1 font-mono text-[9.5px]">
-                             {numbers.length > 0 ? numbers.map((n, i) => (
-                               <span key={i} className="bg-slate-100 border border-slate-300 px-1.5 py-0.5 rounded text-slate-900 font-bold">
-                                 {n}
-                               </span>
-                             )) : <span className="text-slate-400 italic">None isolated</span>}
-                           </div>
-                         </div>
+                        {/* Extracted Entities Grid */}
+                        {hasOCR && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 pt-1">
+                            {/* Amounts */}
+                            {amounts.length > 0 && (
+                              <div className="p-2 bg-emerald-50/50 border border-emerald-200 rounded-lg space-y-1">
+                                <span className="text-[8.5px] font-black uppercase text-emerald-800 flex items-center gap-1">
+                                  <IndianRupee size={10} /> Detected Amounts:
+                                </span>
+                                <div className="flex flex-wrap gap-1 font-mono text-[10px]">
+                                  {amounts.map((a, i) => (
+                                    <span key={i} className="bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded text-emerald-950 font-bold">
+                                      {a}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
 
-                         {/* Isolated Dates */}
-                         <div className="p-2.5 bg-white border border-slate-200 rounded-lg space-y-1">
-                           <span className="text-[8.5px] font-black uppercase text-slate-500 block flex items-center gap-1">
-                             <Calendar size={10} /> Isolated Temporal References:
-                           </span>
-                           <div className="flex flex-wrap gap-1 font-mono text-[9.5px]">
-                             {dates.length > 0 ? dates.map((d, i) => (
-                               <span key={i} className="bg-slate-100 border border-slate-300 px-1.5 py-0.5 rounded text-slate-900 font-bold">
-                                 {d}
-                               </span>
-                             )) : <span className="text-slate-400 italic">None isolated</span>}
-                           </div>
-                         </div>
-                       </div>
+                            {/* Dates & Times */}
+                            {(dates.length > 0 || times.length > 0) && (
+                              <div className="p-2 bg-indigo-50/50 border border-indigo-200 rounded-lg space-y-1">
+                                <span className="text-[8.5px] font-black uppercase text-indigo-800 flex items-center gap-1">
+                                  <Calendar size={10} /> Detected Dates & Times:
+                                </span>
+                                <div className="flex flex-wrap gap-1 font-mono text-[10px]">
+                                  {dates.map((d, i) => (
+                                    <span key={`d-${i}`} className="bg-indigo-100 border border-indigo-300 px-2 py-0.5 rounded text-indigo-950 font-bold">
+                                      {d}
+                                    </span>
+                                  ))}
+                                  {times.map((t, i) => (
+                                    <span key={`t-${i}`} className="bg-indigo-100 border border-indigo-300 px-2 py-0.5 rounded text-indigo-950 font-bold">
+                                      {t}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
 
-                       {/* Tabular Grid Matrix */}
-                       {tables && tables.length > 0 && (
-                         <div className="border border-slate-200 rounded-lg overflow-hidden font-mono text-[9px] bg-white">
-                           <table className="w-full text-left border-collapse">
-                             <thead>
-                               <tr className="bg-slate-100 text-slate-700 border-b border-slate-200 font-bold">
-                                 {tables[0].headers.map((h, i) => (
-                                   <th key={i} className="p-2 border-r last:border-r-0">{h}</th>
-                                 ))}
-                               </tr>
-                             </thead>
-                             <tbody>
-                               {tables[0].rows.map((row, rIdx) => (
-                                 <tr key={rIdx} className="border-b last:border-b-0 hover:bg-slate-50">
-                                   {row.map((cell, cIdx) => (
-                                     <td key={cIdx} className="p-2 border-r last:border-r-0">{cell}</td>
-                                   ))}
-                                 </tr>
-                               ))}
-                             </tbody>
-                           </table>
-                         </div>
-                       )}
-                     </div>
-                   );
-                 })}
+                            {/* People */}
+                            {people.length > 0 && (
+                              <div className="p-2 bg-purple-50/50 border border-purple-200 rounded-lg space-y-1">
+                                <span className="text-[8.5px] font-black uppercase text-purple-800 flex items-center gap-1">
+                                  <User size={10} /> Detected Entities / Names:
+                                </span>
+                                <div className="flex flex-wrap gap-1 font-mono text-[10px]">
+                                  {people.map((p, i) => (
+                                    <span key={i} className="bg-purple-100 border border-purple-300 px-2 py-0.5 rounded text-purple-950 font-bold">
+                                      {p}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Identifiers & UTR */}
+                            {(ids.length > 0 || upiIds.length > 0) && (
+                              <div className="p-2 bg-blue-50/50 border border-blue-200 rounded-lg space-y-1">
+                                <span className="text-[8.5px] font-black uppercase text-blue-800 flex items-center gap-1">
+                                  <Hash size={10} /> Identifiers & UPI Handles:
+                                </span>
+                                <div className="flex flex-wrap gap-1 font-mono text-[10px]">
+                                  {ids.map((idVal, i) => (
+                                    <span key={`id-${i}`} className="bg-blue-100 border border-blue-300 px-2 py-0.5 rounded text-blue-950 font-bold">
+                                      {idVal}
+                                    </span>
+                                  ))}
+                                  {upiIds.map((u, i) => (
+                                    <span key={`upi-${i}`} className="bg-cyan-100 border border-cyan-300 px-2 py-0.5 rounded text-cyan-950 font-bold">
+                                      {u}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Status Signals */}
+                            {statusSignals.length > 0 && (
+                              <div className="p-2 bg-slate-100 border border-slate-300 rounded-lg space-y-1">
+                                <span className="text-[8.5px] font-black uppercase text-slate-700 flex items-center gap-1">
+                                  <CheckCircle2 size={10} className="text-emerald-600" /> Status Signals:
+                                </span>
+                                <div className="flex flex-wrap gap-1 font-mono text-[10px]">
+                                  {statusSignals.map((st, i) => (
+                                    <span key={i} className="bg-white border border-slate-300 px-2 py-0.5 rounded text-slate-900 font-bold">
+                                      {st}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Uncertain Extractions */}
+                            {uncertain.length > 0 && (
+                              <div className="p-2 bg-amber-50/50 border border-amber-200 rounded-lg space-y-1">
+                                <span className="text-[8.5px] font-black uppercase text-amber-800 flex items-center gap-1">
+                                  <AlertCircle size={10} className="text-amber-600" /> Uncertain Extractions (<60% confidence):
+                                </span>
+                                <div className="flex flex-wrap gap-1 font-mono text-[10px]">
+                                  {uncertain.map((u, i) => (
+                                    <span key={i} className="bg-amber-100 border border-amber-300 px-2 py-0.5 rounded text-amber-950">
+                                      {u}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Genuine Tabular Matrix if extracted from image */}
+                        {tables && tables.length > 0 && (
+                          <div className="border border-slate-200 rounded-lg overflow-hidden font-mono text-[9px] bg-white">
+                            <table className="w-full text-left border-collapse">
+                              <thead>
+                                <tr className="bg-slate-100 text-slate-700 border-b border-slate-200 font-bold">
+                                  {tables[0].headers.map((h, i) => (
+                                    <th key={i} className="p-2 border-r last:border-r-0">{h}</th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {tables[0].rows.map((row, rIdx) => (
+                                  <tr key={rIdx} className="border-b last:border-b-0 hover:bg-slate-50">
+                                    {row.map((cell, cIdx) => (
+                                      <td key={cIdx} className="p-2 border-r last:border-r-0">{cell}</td>
+                                    ))}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                </div>
              ) : (
                <p className="text-xs text-slate-500 italic p-4 border rounded">No evidence available to parse.</p>

@@ -4,7 +4,8 @@ import { API_BASE_URL } from '../config';
 import { 
   HardDrive, AlertTriangle, Eye, Binary, Search, FileText, 
   ShieldCheck, Loader2, Play, Check, Copy, Calendar, BarChart3, Database,
-  Trash2, Lock
+  Trash2, Lock, Clock, DollarSign, UserCheck, Key, AtSign, Building2,
+  CheckCircle2, AlertCircle, RefreshCw, Layers, Shield
 } from 'lucide-react';
 
 const isUUID = (str) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str || '');
@@ -13,12 +14,15 @@ const isUUID = (str) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-
 const EvidenceOCRPanel = ({ selectedFile, selectedCaseId, backendActive }) => {
   const [scanning, setScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState('');
+  const [scanError, setScanError] = useState(null);
   const [copied, setCopied] = useState(false);
   const [ocrData, setOcrData] = useState(null);
+  const [activeStreamTab, setActiveStreamTab] = useState('PRIMARY'); // PRIMARY | PADDLE | EASY
 
-  // Fetch existing OCR scan results when selected file changes
+  // Fetch existing OCR scan results from server when selected file changes
   useEffect(() => {
     setOcrData(null);
+    setScanError(null);
     if (backendActive && isUUID(selectedCaseId) && isUUID(selectedFile?.id)) {
       const token = localStorage.getItem('token');
       const authHeader = token ? { 'Authorization': `Bearer ${token}` } : {};
@@ -28,58 +32,64 @@ const EvidenceOCRPanel = ({ selectedFile, selectedCaseId, backendActive }) => {
         .then(data => {
           if (data && Array.isArray(data) && data.length > 0) {
             const lastRecord = data[data.length - 1];
+            const extData = lastRecord.extracted_data || {};
             
-            // Extract numbers and dates from saved text if available
-            const text = lastRecord.extracted_text || '';
-            const numbers = (text.match(/\b\d+(?:\.\d+)?\b/g) || []).slice(0, 10);
-            const dates = (text.match(/\b\d{4}[-/]\d{2}[-/]\d{2}\b|\b\d{2}[-/]\d{2}[-/]\d{4}\b/g) || []).slice(0, 5);
-
             setOcrData({
-              extractedText: text,
+              extractedText: lastRecord.extracted_text || '',
               extractedData: {
-                tables: [
-                  {
-                    headers: ["Forensic Asset", "Extracted Symbol", "Engine Confidence"],
-                    rows: [
-                      ["File Target", selectedFile.fileName, `${(lastRecord.confidence_score || 95).toFixed(1)}%`],
-                      ["Extraction Mode", "Multi-Engine Pipeline", "98.2%"]
-                    ]
-                  }
-                ],
-                numbers: Array.from(new Set(numbers)),
-                dates: Array.from(new Set(dates))
+                dates: extData.dates || [],
+                times: extData.times || [],
+                amounts: extData.amounts || [],
+                people: extData.people || [],
+                ids: extData.ids || [],
+                upi_ids: extData.upi_ids || [],
+                emails: extData.emails || [],
+                urls: extData.urls || [],
+                banking_details: extData.banking_details || [],
+                status_signals: extData.status_signals || [],
+                numbers: extData.numbers || [],
+                tables: extData.tables || [],
+                uncertain_extractions: extData.uncertain_extractions || []
               },
-              comparison: {
-                easyocr: {
-                  engineName: "EasyOCR (PyTorch / Multi-Format)",
-                  time: 0.38,
-                  accuracy: Number((lastRecord.confidence_score || 93.42).toFixed(2)),
-                  badge: "EXCELLENT"
-                },
+              comparison: extData.engine_comparison || {
                 paddleocr: {
-                  engineName: "PaddleOCR (PaddlePaddle / Deep-Layer)",
-                  time: 0.24,
-                  accuracy: 96.15,
-                  badge: "EXCELLENT"
+                  engine_name: "PaddleOCR (Primary Engine)",
+                  status: "SUCCESS",
+                  inference_time_seconds: 0.0,
+                  confidence_score: Number((lastRecord.confidence_score || 0).toFixed(2)),
+                  detected_blocks_count: 0
+                },
+                easyocr: {
+                  engine_name: "EasyOCR (Secondary / Verification)",
+                  status: "SUCCESS",
+                  inference_time_seconds: 0.0,
+                  confidence_score: 0.0,
+                  detected_blocks_count: 0
                 }
-              }
+              },
+              crossAgreement: extData.cross_engine_agreement ?? null,
+              fileSha256: extData.file_sha256 || selectedFile?.sha256 || '',
+              rawPaddleText: extData.raw_paddle_text || lastRecord.extracted_text || '',
+              rawEasyText: extData.raw_easy_text || ''
             });
           }
         })
-        .catch(() => {});
+        .catch((err) => {
+          console.warn("Failed to fetch saved OCR record:", err);
+        });
     }
   }, [selectedFile?.id, selectedCaseId, backendActive]);
 
   const runOCRScan = async () => {
     setScanning(true);
-    setScanProgress('INITIALIZING PARSER & OCR MODELS (EASYOCR & PADDLEOCR)...');
+    setScanError(null);
+    setScanProgress('Connecting to ForenSight Multi-Engine OCR Pipeline...');
 
     const steps = [
-      { t: 400, log: 'PARSING FILE EXTENSION CHANNELS & EXTRACTING ROW VECTORS...' },
-      { t: 1000, log: 'EASYOCR ENGINE INFERENCE RUNNING (PYTORCH INT8 LAYERS)...' },
-      { t: 1800, log: 'PADDLEOCR ENGINE INFERENCE RUNNING (PADDLEPADDLE FP16 LAYERS)...' },
-      { t: 2600, log: 'COMPILING CHAR CONFIDENCE & INTERPOLATING EXTRACTED TEXT...' },
-      { t: 3400, log: 'POST-PROCESSING TEXT, TABLES, NUMBERS & DATE ENTITIES...' }
+      { t: 400, log: 'Loading evidence container & checking SHA-256 cryptographic signature...' },
+      { t: 1200, log: 'Running PaddleOCR (Primary Engine) text detection & recognition...' },
+      { t: 3000, log: 'Running EasyOCR (Secondary Engine) verification scan...' },
+      { t: 5000, log: 'Cross-referencing engine outputs & extracting structured entities...' }
     ];
 
     steps.forEach((step) => {
@@ -105,101 +115,57 @@ const EvidenceOCRPanel = ({ selectedFile, selectedCaseId, backendActive }) => {
           const resData = await response.json();
           setScanning(false);
           
+          const extData = resData.extracted_data || {};
           setOcrData({
             extractedText: resData.record?.extracted_text || resData.extracted_text || "No text detected",
-            extractedData: resData.extracted_data || { tables: [], numbers: [], dates: [] },
-            comparison: {
-              easyocr: {
-                engineName: resData.comparison?.easyocr?.engine_name || "EasyOCR (PyTorch / Multi-Format)",
-                time: resData.comparison?.easyocr?.inference_time_seconds || 0.38,
-                accuracy: resData.comparison?.easyocr?.confidence_score || 93.42,
-                badge: resData.comparison?.easyocr?.accuracy_rating || "EXCELLENT"
-              },
-              paddleocr: {
-                engineName: resData.comparison?.paddleocr?.engine_name || "PaddleOCR (PaddlePaddle / Deep-Layer)",
-                time: resData.comparison?.paddleocr?.inference_time_seconds || 0.24,
-                accuracy: resData.comparison?.paddleocr?.confidence_score || 96.15,
-                badge: resData.comparison?.paddleocr?.accuracy_rating || "EXCELLENT"
-              }
-            }
+            extractedData: {
+              dates: extData.dates || [],
+              times: extData.times || [],
+              amounts: extData.amounts || [],
+              people: extData.people || [],
+              ids: extData.ids || [],
+              upi_ids: extData.upi_ids || [],
+              emails: extData.emails || [],
+              urls: extData.urls || [],
+              banking_details: extData.banking_details || [],
+              status_signals: extData.status_signals || [],
+              numbers: extData.numbers || [],
+              tables: extData.tables || [],
+              uncertain_extractions: extData.uncertain_extractions || []
+            },
+            comparison: resData.comparison || {},
+            crossAgreement: resData.cross_engine_agreement ?? null,
+            fileSha256: resData.file_sha256 || resData.record?.extracted_data?.file_sha256 || selectedFile?.sha256,
+            rawPaddleText: resData.raw_paddle_text || "",
+            rawEasyText: resData.raw_easy_text || ""
           });
           return;
+        } else {
+          const errBody = await response.json().catch(() => ({}));
+          throw new Error(errBody.detail || `Server returned HTTP ${response.status}`);
         }
+      } else {
+        throw new Error("Invalid Case or Evidence identifier for live OCR processing.");
       }
     } catch (err) {
-      console.warn("Backend OCR API endpoint error, executing local fallback:", err);
-    }
-
-    // High-fidelity fallback timer if backend offline
-    setTimeout(() => {
+      console.error("OCR execution failure:", err);
       setScanning(false);
-      
-      const fileName = selectedFile.fileName.toLowerCase();
-      let text = '';
-      let tables = [];
-      let numbers = [];
-      let dates = [];
-
-      if (fileName.includes('tamper') || fileName.includes('log')) {
-        text = `EVIDENTIARY TEXT EXTRACTION [${selectedFile.fileName}]. CONFIDENTIAL STAFF RECORDS. Employee ID: FNS-993. Clearance Rank: Level 4. Last modified date: 2026-07-30. Account balances cleared: $142,390. Server database connection ports: 5432, 8080. SQL query returned: 12 table records deleted.`;
-        numbers = ["993", "4", "142,390", "5432", "8080", "12"];
-        dates = ["2026-07-30"];
-        tables = [
-          {
-            headers: ["Forensic Key", "Extracted Value", "Confidence"],
-            rows: [
-              ["Employee ID", "FNS-993", "99.2%"],
-              ["Clearance", "Level 4", "97.4%"],
-              ["Balance", "$142,390", "98.1%"],
-              ["Date", "2026-07-30", "99.8%"]
-            ]
-          }
-        ];
-      } else if (fileName.includes('exif') || fileName.includes('jpg') || fileName.includes('png')) {
-        text = `TOP SECRET GPS COORDINATE VECTOR DETECTED [${selectedFile.fileName}]. Reading system matrix: Exif geotags. Latitude: 28.6139, Longitude: 77.2090. Target name: New Delhi Workstation. Remote client sync date: 2026-07-28 08:12:00.`;
-        numbers = ["28.6139", "77.2090", "08:12:00"];
-        dates = ["2026-07-28"];
-        tables = [
-          {
-            headers: ["Forensic Parameter", "Extracted Coordinate", "Engine Confidence"],
-            rows: [
-              ["GPS Latitude", "28.6139", "99.4%"],
-              ["GPS Longitude", "77.2090", "99.5%"],
-              ["Sealed Time", "2026-07-28 08:12:00", "96.8%"]
-            ]
-          }
-        ];
-      } else {
-        text = `EVIDENTIARY TEXT EXTRACTION FOR FORENSIGHT SYSTEMS [${selectedFile.fileName}]. Log dump trace: SYSTEM COMPLETED ON 2026-08-01. Port check returned code 200. Open communication sockets: Port 8080, Port 22.`;
-        numbers = ["200", "8080", "22"];
-        dates = ["2026-08-01"];
-        tables = [
-          {
-            headers: ["Socket Descriptor", "Port Identifier", "Scan Status"],
-            rows: [
-              ["Web Service", "8080", "Open (98% conf)"],
-              ["Secure Shell (SSH)", "22", "Open (99% conf)"]
-            ]
-          }
-        ];
-      }
-
-      setOcrData({
-        extractedText: text,
-        extractedData: { tables, numbers, dates },
-        comparison: {
-          easyocr: { engineName: "EasyOCR (PyTorch / Multi-Format)", time: 0.38, accuracy: 93.42, badge: "EXCELLENT" },
-          paddleocr: { engineName: "PaddleOCR (PaddlePaddle / Deep-Layer)", time: 0.24, accuracy: 96.15, badge: "EXCELLENT" }
-        }
-      });
-    }, 3800);
+      setScanError(err.message || "Failed to execute OCR scan on evidence file.");
+    }
   };
 
-  const copyText = () => {
-    if (!ocrData) return;
-    navigator.clipboard.writeText(ocrData.extractedText);
+  const copyText = (content) => {
+    if (!content) return;
+    navigator.clipboard.writeText(content);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const getDisplayedStreamText = () => {
+    if (!ocrData) return '';
+    if (activeStreamTab === 'PADDLE') return ocrData.rawPaddleText || 'No text detected by PaddleOCR.';
+    if (activeStreamTab === 'EASY') return ocrData.rawEasyText || 'No text detected by EasyOCR.';
+    return ocrData.extractedText || 'No text detected.';
   };
 
   return (
@@ -212,9 +178,15 @@ const EvidenceOCRPanel = ({ selectedFile, selectedCaseId, backendActive }) => {
           <div className="space-y-1">
             <h4 className="text-sm font-bold text-foreground">Multi-Engine OCR Processing Pending</h4>
             <p className="text-[10px] text-muted max-w-md">
-              Run character recognition across parallel models (EasyOCR and PaddleOCR) to isolate Text strings, tabular data, numbers, and dates.
+              Run genuine character recognition across dual engines (PaddleOCR & EasyOCR) to isolate text, numbers, dates, amounts, people, and transaction identifiers without synthetic data.
             </p>
           </div>
+          {scanError && (
+            <div className="p-3 bg-danger/10 border border-danger/30 rounded-xl text-danger text-xs font-mono max-w-md flex items-center gap-2">
+              <AlertCircle size={14} className="shrink-0" />
+              <span>{scanError}</span>
+            </div>
+          )}
           <button
             onClick={runOCRScan}
             className="bg-primary hover:bg-primary-dark text-white rounded-lg px-6 py-2.5 text-xs font-bold transition-all shadow hover:shadow-primary/20 flex items-center gap-1.5"
@@ -233,7 +205,6 @@ const EvidenceOCRPanel = ({ selectedFile, selectedCaseId, backendActive }) => {
             <h4 className="text-xs font-bold font-mono text-primary uppercase tracking-widest">OCR Pipeline Active</h4>
             <p className="text-[9px] font-mono text-muted">{scanProgress}</p>
           </div>
-          {/* Mock progress line */}
           <div className="w-48 bg-border/40 h-1.5 rounded-full overflow-hidden">
             <div className="bg-primary h-full animate-progress rounded-full" />
           </div>
@@ -244,156 +215,412 @@ const EvidenceOCRPanel = ({ selectedFile, selectedCaseId, backendActive }) => {
       {ocrData && (
         <div className="space-y-6 animate-fade-in">
           
-          {/* Accuracy & Speed Comparison Matrices */}
+          {/* Dual Engine Metrics (PaddleOCR & EasyOCR) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             
-            {/* PaddleOCR Card */}
+            {/* PaddleOCR Card (Primary) */}
             <div className="p-4 border rounded-2xl glassmorphism bg-success/5 relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-24 h-24 bg-success/5 rounded-full filter blur-xl" />
               <div className="flex items-center justify-between mb-3">
-                <span className="text-[10px] font-bold text-success uppercase tracking-wider">Engine 1 (Primary)</span>
-                <span className="px-2 py-0.5 rounded-full bg-success/15 text-success font-mono font-bold text-[8px]">
-                  {ocrData.comparison.paddleocr.badge}
+                <span className="text-[10px] font-bold text-success uppercase tracking-wider flex items-center gap-1">
+                  <CheckCircle2 size={12} />
+                  OCR Engine 1 (Primary)
+                </span>
+                <span className={`px-2 py-0.5 rounded-full font-mono font-bold text-[8px] ${
+                  ocrData.comparison?.paddleocr?.status === 'SUCCESS' ? 'bg-success/15 text-success' : 'bg-danger/15 text-danger'
+                }`}>
+                  {ocrData.comparison?.paddleocr?.status || 'READY'}
                 </span>
               </div>
-              <h4 className="text-xs font-extrabold text-foreground">{ocrData.comparison.paddleocr.engineName}</h4>
-              <div className="grid grid-cols-2 gap-4 mt-4 text-[10px] leading-relaxed">
+              <h4 className="text-xs font-extrabold text-foreground">
+                {ocrData.comparison?.paddleocr?.engine_name || 'PaddleOCR (Primary Engine)'}
+              </h4>
+              <div className="grid grid-cols-2 gap-3 mt-4 text-[10px] leading-relaxed">
                 <div>
-                  <span className="text-muted block font-semibold mb-0.5">INFERENCE SPEED</span>
-                  <strong className="text-foreground text-xs">{(ocrData.comparison.paddleocr.time * 1000).toFixed(0)} ms</strong>
+                  <span className="text-muted block font-semibold mb-0.5 uppercase tracking-wider">Processing Time</span>
+                  <strong className="text-foreground text-xs font-mono">
+                    {ocrData.comparison?.paddleocr?.inference_time_seconds 
+                      ? `${ocrData.comparison.paddleocr.inference_time_seconds} s` 
+                      : 'N/A'}
+                  </strong>
                 </div>
                 <div>
-                  <span className="text-muted block font-semibold mb-0.5">ACCURACY RATING</span>
-                  <strong className="text-foreground text-xs">{ocrData.comparison.paddleocr.accuracy}%</strong>
+                  <span className="text-muted block font-semibold mb-0.5 uppercase tracking-wider">Mean Confidence</span>
+                  <strong className="text-foreground text-xs font-mono">
+                    {ocrData.comparison?.paddleocr?.confidence_score !== undefined 
+                      ? `${ocrData.comparison.paddleocr.confidence_score}%` 
+                      : 'N/A'}
+                  </strong>
                 </div>
               </div>
+              {ocrData.comparison?.paddleocr?.error_message && (
+                <div className="mt-3 text-[9px] text-danger font-mono bg-danger/10 p-2 rounded border border-danger/20">
+                  {ocrData.comparison.paddleocr.error_message}
+                </div>
+              )}
             </div>
 
-            {/* EasyOCR Card */}
+            {/* EasyOCR Card (Secondary) */}
             <div className="p-4 border rounded-2xl glassmorphism bg-primary/5 relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-24 h-24 bg-primary/5 rounded-full filter blur-xl" />
               <div className="flex items-center justify-between mb-3">
-                <span className="text-[10px] font-bold text-primary uppercase tracking-wider">Engine 2 (Secondary)</span>
-                <span className="px-2 py-0.5 rounded-full bg-primary/15 text-primary font-mono font-bold text-[8px]">
-                  {ocrData.comparison.easyocr.badge}
+                <span className="text-[10px] font-bold text-primary uppercase tracking-wider flex items-center gap-1">
+                  <Layers size={12} />
+                  OCR Engine 2 (Secondary / Verification)
+                </span>
+                <span className={`px-2 py-0.5 rounded-full font-mono font-bold text-[8px] ${
+                  ocrData.comparison?.easyocr?.status === 'SUCCESS' ? 'bg-primary/15 text-primary' : 'bg-amber-500/15 text-amber-500'
+                }`}>
+                  {ocrData.comparison?.easyocr?.status || 'READY'}
                 </span>
               </div>
-              <h4 className="text-xs font-extrabold text-foreground">{ocrData.comparison.easyocr.engineName}</h4>
-              <div className="grid grid-cols-2 gap-4 mt-4 text-[10px] leading-relaxed">
+              <h4 className="text-xs font-extrabold text-foreground">
+                {ocrData.comparison?.easyocr?.engine_name || 'EasyOCR (Secondary / Verification)'}
+              </h4>
+              <div className="grid grid-cols-2 gap-3 mt-4 text-[10px] leading-relaxed">
                 <div>
-                  <span className="text-muted block font-semibold mb-0.5">INFERENCE SPEED</span>
-                  <strong className="text-foreground text-xs">{(ocrData.comparison.easyocr.time * 1000).toFixed(0)} ms</strong>
+                  <span className="text-muted block font-semibold mb-0.5 uppercase tracking-wider">Processing Time</span>
+                  <strong className="text-foreground text-xs font-mono">
+                    {ocrData.comparison?.easyocr?.inference_time_seconds 
+                      ? `${ocrData.comparison.easyocr.inference_time_seconds} s` 
+                      : 'N/A'}
+                  </strong>
                 </div>
                 <div>
-                  <span className="text-muted block font-semibold mb-0.5">ACCURACY RATING</span>
-                  <strong className="text-foreground text-xs">{ocrData.comparison.easyocr.accuracy}%</strong>
+                  <span className="text-muted block font-semibold mb-0.5 uppercase tracking-wider">Mean Confidence</span>
+                  <strong className="text-foreground text-xs font-mono">
+                    {ocrData.comparison?.easyocr?.confidence_score !== undefined 
+                      ? `${ocrData.comparison.easyocr.confidence_score}%` 
+                      : 'N/A'}
+                  </strong>
                 </div>
               </div>
+              {ocrData.comparison?.easyocr?.error_message && (
+                <div className="mt-3 text-[9px] text-danger font-mono bg-danger/10 p-2 rounded border border-danger/20">
+                  {ocrData.comparison.easyocr.error_message}
+                </div>
+              )}
             </div>
 
           </div>
 
-          {/* Text and Entities display tabs container */}
+          {/* Cross-Engine Agreement Badge */}
+          {ocrData.crossAgreement !== null && ocrData.crossAgreement !== undefined && (
+            <div className="p-3 border rounded-xl bg-card/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2">
+                <ShieldCheck size={16} className="text-primary" />
+                <span className="font-bold text-foreground">Cross-Engine Text Agreement:</span>
+                <span className="font-mono font-black text-primary bg-primary/10 px-2 py-0.5 rounded">
+                  {ocrData.crossAgreement}%
+                </span>
+              </div>
+              <span className="text-[10px] text-muted">
+                Calculated via token overlap between PaddleOCR and EasyOCR outputs.
+              </span>
+            </div>
+          )}
+
+          {/* File Integrity Verification Box */}
+          <div className="p-4 border rounded-2xl bg-card/25 space-y-2 border-border/40">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold text-muted uppercase tracking-wider flex items-center gap-1.5">
+                <Shield size={12} className="text-primary" />
+                File Integrity & Cryptographic Seal (ISO/IEC 27037)
+              </span>
+              <span className="text-[9px] bg-success/10 text-success border border-success/20 px-2 py-0.5 rounded font-mono font-bold">
+                Direct Byte Verification
+              </span>
+            </div>
+            <div className="text-[10px] space-y-1">
+              <span className="text-muted block font-semibold">FILE SHA-256 HASH:</span>
+              <p className="font-mono text-foreground bg-background/50 p-2.5 rounded-lg border border-border/10 select-all break-all font-bold">
+                {ocrData.fileSha256 || selectedFile?.sha256 || "N/A"}
+              </p>
+            </div>
+          </div>
+
+          {/* EXTRACTED INFORMATION (Genuinely Detected Entities) */}
           <div className="border rounded-2xl glassmorphism p-5 space-y-4">
-            
-            {/* Text header & copy action */}
             <div className="flex items-center justify-between border-b pb-3 border-border/20">
-              <h3 className="text-xs uppercase font-bold tracking-wider text-primary flex items-center gap-1.5">
+              <h3 className="text-xs uppercase font-extrabold tracking-wider text-primary flex items-center gap-1.5">
                 <FileText size={14} />
-                Extracted Text Segment
+                Extracted Information (Detected Entities Only)
               </h3>
-              <button 
-                onClick={copyText}
-                className="px-2.5 py-1 text-[9px] border rounded bg-background/50 hover:bg-background/80 text-muted transition-colors flex items-center gap-1 font-bold"
-              >
-                {copied ? <Check size={10} className="text-success" /> : <Copy size={10} />}
-                {copied ? 'Copied' : 'Copy Text'}
-              </button>
+              <span className="text-[10px] text-muted">Traceable directly to evidence payload</span>
             </div>
 
-            {/* Extracted block */}
-            <p className="text-[11px] leading-relaxed text-foreground bg-background/50 p-4 rounded-xl font-mono border border-border/10 select-all">
-              {ocrData.extractedText}
-            </p>
-
-            {/* Entities extracted sub-grids (Tables, Numbers, Dates) */}
-            <div className="space-y-4 pt-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                
-                {/* Numbers */}
-                <div className="p-3 border rounded-xl bg-background/30 space-y-2">
-                  <span className="text-[9px] font-bold text-muted uppercase block tracking-wider flex items-center gap-1">
-                    <BarChart3 size={11} className="text-primary" />
-                    Isolated Numbers
+              {/* Status / Transaction Outcome */}
+              {ocrData.extractedData.status_signals && ocrData.extractedData.status_signals.length > 0 && (
+                <div className="p-3 border rounded-xl bg-background/40 space-y-1.5 md:col-span-2 lg:col-span-3">
+                  <span className="text-[9px] font-bold text-success uppercase block tracking-wider flex items-center gap-1">
+                    <CheckCircle2 size={11} />
+                    Detected Transaction Status:
                   </span>
                   <div className="flex flex-wrap gap-1.5">
-                    {ocrData.extractedData.numbers.map((num, i) => (
-                      <span key={i} className="px-2 py-0.5 rounded border bg-background/50 font-mono text-[9px] text-foreground font-bold">
+                    {ocrData.extractedData.status_signals.map((sig, i) => (
+                      <span key={i} className="px-2.5 py-1 rounded-lg border border-success/30 bg-success/10 font-bold text-xs text-success">
+                        {sig}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Amounts */}
+              {ocrData.extractedData.amounts && ocrData.extractedData.amounts.length > 0 && (
+                <div className="p-3 border rounded-xl bg-background/40 space-y-1.5">
+                  <span className="text-[9px] font-bold text-muted uppercase block tracking-wider flex items-center gap-1">
+                    <DollarSign size={11} className="text-primary" />
+                    Currency / Amount:
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {ocrData.extractedData.amounts.map((amt, i) => (
+                      <span key={i} className="px-2 py-0.5 rounded border border-primary/20 bg-primary/10 font-mono text-xs font-black text-primary">
+                        {amt}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* People / Beneficiaries */}
+              {ocrData.extractedData.people && ocrData.extractedData.people.length > 0 && (
+                <div className="p-3 border rounded-xl bg-background/40 space-y-1.5">
+                  <span className="text-[9px] font-bold text-muted uppercase block tracking-wider flex items-center gap-1">
+                    <UserCheck size={11} className="text-primary" />
+                    Person / Beneficiary:
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {ocrData.extractedData.people.map((p, i) => (
+                      <span key={i} className="px-2 py-0.5 rounded border bg-background/60 font-sans text-xs font-extrabold text-foreground">
+                        {p}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Dates */}
+              {ocrData.extractedData.dates && ocrData.extractedData.dates.length > 0 && (
+                <div className="p-3 border rounded-xl bg-background/40 space-y-1.5">
+                  <span className="text-[9px] font-bold text-muted uppercase block tracking-wider flex items-center gap-1">
+                    <Calendar size={11} className="text-primary" />
+                    Isolated Dates:
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {ocrData.extractedData.dates.map((d, i) => (
+                      <span key={i} className="px-2 py-0.5 rounded border bg-background/60 font-mono text-[10px] text-foreground font-bold">
+                        {d}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Times */}
+              {ocrData.extractedData.times && ocrData.extractedData.times.length > 0 && (
+                <div className="p-3 border rounded-xl bg-background/40 space-y-1.5">
+                  <span className="text-[9px] font-bold text-muted uppercase block tracking-wider flex items-center gap-1">
+                    <Clock size={11} className="text-primary" />
+                    Isolated Times:
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {ocrData.extractedData.times.map((t, i) => (
+                      <span key={i} className="px-2 py-0.5 rounded border bg-background/60 font-mono text-[10px] text-foreground font-bold">
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* IDs (Transaction ID, UTR) */}
+              {ocrData.extractedData.ids && ocrData.extractedData.ids.length > 0 && (
+                <div className="p-3 border rounded-xl bg-background/40 space-y-1.5 md:col-span-2">
+                  <span className="text-[9px] font-bold text-muted uppercase block tracking-wider flex items-center gap-1">
+                    <Key size={11} className="text-primary" />
+                    Transaction IDs & Reference UTRs:
+                  </span>
+                  <div className="flex flex-col gap-1">
+                    {ocrData.extractedData.ids.map((idVal, i) => (
+                      <span key={i} className="px-2 py-0.5 rounded border bg-background/60 font-mono text-[10px] text-foreground font-bold break-all">
+                        {idVal}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* UPI IDs */}
+              {ocrData.extractedData.upi_ids && ocrData.extractedData.upi_ids.length > 0 && (
+                <div className="p-3 border rounded-xl bg-background/40 space-y-1.5">
+                  <span className="text-[9px] font-bold text-muted uppercase block tracking-wider flex items-center gap-1">
+                    <AtSign size={11} className="text-primary" />
+                    UPI Handles:
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {ocrData.extractedData.upi_ids.map((upi, i) => (
+                      <span key={i} className="px-2 py-0.5 rounded border border-accent/20 bg-accent/5 font-mono text-[10px] text-accent font-bold">
+                        {upi}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Banking & Accounts */}
+              {ocrData.extractedData.banking_details && ocrData.extractedData.banking_details.length > 0 && (
+                <div className="p-3 border rounded-xl bg-background/40 space-y-1.5">
+                  <span className="text-[9px] font-bold text-muted uppercase block tracking-wider flex items-center gap-1">
+                    <Building2 size={11} className="text-primary" />
+                    Banking Details:
+                  </span>
+                  <div className="flex flex-col gap-1">
+                    {ocrData.extractedData.banking_details.map((b, i) => (
+                      <span key={i} className="px-2 py-0.5 rounded border bg-background/60 font-mono text-[10px] text-foreground">
+                        {b}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Isolated Numbers */}
+              {ocrData.extractedData.numbers && ocrData.extractedData.numbers.length > 0 && (
+                <div className="p-3 border rounded-xl bg-background/40 space-y-1.5 md:col-span-2">
+                  <span className="text-[9px] font-bold text-muted uppercase block tracking-wider flex items-center gap-1">
+                    <BarChart3 size={11} className="text-primary" />
+                    Isolated Numeric Tokens:
+                  </span>
+                  <div className="flex flex-wrap gap-1">
+                    {ocrData.extractedData.numbers.slice(0, 15).map((num, i) => (
+                      <span key={i} className="px-1.5 py-0.5 rounded border bg-background/60 font-mono text-[9px] text-muted font-bold">
                         {num}
                       </span>
                     ))}
                   </div>
                 </div>
-
-                {/* Dates */}
-                <div className="p-3 border rounded-xl bg-background/30 space-y-2">
-                  <span className="text-[9px] font-bold text-muted uppercase block tracking-wider flex items-center gap-1">
-                    <Calendar size={11} className="text-primary" />
-                    Isolated Dates
-                  </span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {ocrData.extractedData.dates.map((dt, i) => (
-                      <span key={i} className="px-2 py-0.5 rounded border border-primary/20 bg-primary/5 font-mono text-[9px] text-primary font-bold flex items-center gap-1">
-                        <Calendar size={8} />
-                        {dt}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-              </div>
-
-              {/* Table Data Extraction */}
-              {ocrData.extractedData.tables.map((table, tIdx) => (
-                <div key={tIdx} className="border rounded-xl overflow-hidden text-[9px]">
-                  <div className="bg-border/20 px-3 py-1.5 border-b font-bold text-[9px] uppercase tracking-wider text-muted flex items-center gap-1">
-                    <Database size={11} className="text-primary" />
-                    Tabular Grid Matrix Extraction
-                  </div>
-                  <table className="w-full text-left border-collapse font-mono">
-                    <thead>
-                      <tr className="bg-background/40 border-b text-muted font-bold">
-                        {table.headers.map((h, i) => (
-                          <th key={i} className="p-2 border-r last:border-r-0">{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {table.rows.map((row, rIdx) => (
-                        <tr key={rIdx} className="border-b last:border-b-0 hover:bg-background/20 transition-colors">
-                          {row.map((cell, cIdx) => (
-                            <td key={cIdx} className="p-2 border-r last:border-r-0">{cell}</td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ))}
+              )}
 
             </div>
 
-            {/* Reset Button */}
-            <div className="pt-2 text-right">
+            {/* Uncertain Extractions Warning Box (Requirement 11) */}
+            {ocrData.extractedData.uncertain_extractions && ocrData.extractedData.uncertain_extractions.length > 0 && (
+              <div className="p-3 border rounded-xl border-amber-500/30 bg-amber-500/5 space-y-1.5 text-xs text-amber-500">
+                <span className="font-bold flex items-center gap-1.5 uppercase text-[9px] tracking-wider">
+                  <AlertCircle size={12} />
+                  Uncertain Extractions (Low Confidence &lt; 60% — Manual Examiner Verification Required):
+                </span>
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {ocrData.extractedData.uncertain_extractions.map((u, i) => (
+                    <span key={i} className="px-2 py-0.5 rounded border border-amber-500/30 bg-background/50 font-mono text-[9.5px]">
+                      "{u.text}" ({u.confidence}% conf)
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Genuine Tabular Data (Only if present; no fake tables) */}
+            {ocrData.extractedData.tables && ocrData.extractedData.tables.length > 0 && (
+              <div className="space-y-2 pt-2">
+                <span className="text-[10px] font-bold text-muted uppercase tracking-wider flex items-center gap-1">
+                  <Database size={12} className="text-primary" />
+                  Detected Tabular Grid Structure:
+                </span>
+                {ocrData.extractedData.tables.map((table, tIdx) => (
+                  <div key={tIdx} className="border rounded-xl overflow-hidden text-[9px]">
+                    <table className="w-full text-left border-collapse font-mono">
+                      <thead>
+                        <tr className="bg-background/40 border-b text-muted font-bold">
+                          {table.headers.map((h, i) => (
+                            <th key={i} className="p-2 border-r last:border-r-0">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {table.rows.map((row, rIdx) => (
+                          <tr key={rIdx} className="border-b last:border-b-0 hover:bg-background/20 transition-colors">
+                            {row.map((cell, cIdx) => (
+                              <td key={cIdx} className="p-2 border-r last:border-r-0">{cell}</td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ))}
+              </div>
+            )}
+
+          </div>
+
+          {/* RAW EXTRACTED TEXT (Requirement 16) */}
+          <div className="border rounded-2xl glassmorphism p-5 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b pb-3 border-border/20">
+              <div className="flex items-center gap-2">
+                <h3 className="text-xs uppercase font-extrabold tracking-wider text-primary flex items-center gap-1.5">
+                  <FileText size={14} />
+                  Raw Extracted Text
+                </h3>
+                {/* Engine stream selector */}
+                <div className="flex gap-1 ml-2">
+                  <button
+                    onClick={() => setActiveStreamTab('PRIMARY')}
+                    className={`px-2 py-0.5 rounded text-[9px] font-bold font-mono transition-all ${
+                      activeStreamTab === 'PRIMARY' ? 'bg-primary text-white' : 'text-muted hover:bg-border/30'
+                    }`}
+                  >
+                    Primary Output
+                  </button>
+                  {ocrData.rawPaddleText && (
+                    <button
+                      onClick={() => setActiveStreamTab('PADDLE')}
+                      className={`px-2 py-0.5 rounded text-[9px] font-bold font-mono transition-all ${
+                        activeStreamTab === 'PADDLE' ? 'bg-primary text-white' : 'text-muted hover:bg-border/30'
+                      }`}
+                    >
+                      PaddleOCR Stream
+                    </button>
+                  )}
+                  {ocrData.rawEasyText && (
+                    <button
+                      onClick={() => setActiveStreamTab('EASY')}
+                      className={`px-2 py-0.5 rounded text-[9px] font-bold font-mono transition-all ${
+                        activeStreamTab === 'EASY' ? 'bg-primary text-white' : 'text-muted hover:bg-border/30'
+                      }`}
+                    >
+                      EasyOCR Stream
+                    </button>
+                  )}
+                </div>
+              </div>
+
               <button 
-                onClick={() => setOcrData(null)}
-                className="text-muted hover:text-foreground text-[9px] font-bold underline"
+                onClick={() => copyText(getDisplayedStreamText())}
+                className="px-2.5 py-1 text-[9px] border rounded bg-background/50 hover:bg-background/80 text-muted transition-colors flex items-center gap-1 font-bold"
               >
-                Clear scan parameters
+                {copied ? <Check size={10} className="text-success" /> : <Copy size={10} />}
+                {copied ? 'Copied' : 'Copy Raw Text'}
               </button>
             </div>
 
+            {/* Extracted text payload block */}
+            <pre className="text-[11px] leading-relaxed text-foreground bg-background/50 p-4 rounded-xl font-mono border border-border/10 select-all whitespace-pre-wrap break-words max-h-96 overflow-auto">
+              {getDisplayedStreamText()}
+            </pre>
+
+            {/* Re-run button */}
+            <div className="pt-2 flex justify-between items-center text-[10px] text-muted">
+              <span>Original evidence preserved without alterations.</span>
+              <button 
+                onClick={runOCRScan}
+                className="text-primary hover:underline font-bold flex items-center gap-1"
+              >
+                <RefreshCw size={10} />
+                Re-run OCR Scan
+              </button>
+            </div>
           </div>
 
         </div>
@@ -406,7 +633,7 @@ const EvidenceOCRPanel = ({ selectedFile, selectedCaseId, backendActive }) => {
 const EvidenceViewer = () => {
   const { caseEvidence, selectedCaseId, backendActive, deleteEvidenceFile } = useProject();
   const [selectedFileId, setSelectedFileId] = useState(caseEvidence[0]?.id || '');
-  const [viewMode, setViewMode] = useState('STANDARD'); // STANDARD, HEX, METADATA, OCR
+  const [viewMode, setViewMode] = useState('STANDARD'); // STANDARD, HEX, OCR
   const [hexOffsetLimit, setHexOffsetLimit] = useState(128);
   const [fileExtractedData, setFileExtractedData] = useState(null);
 
@@ -446,16 +673,14 @@ const EvidenceViewer = () => {
     }
   }, [selectedFile?.id, selectedCaseId, backendActive]);
 
-  const extractedTextContent = fileExtractedData?.extracted_text || (
-    selectedFile?.fileName.toLowerCase().includes('tamper') || selectedFile?.fileName.toLowerCase().includes('log')
-      ? `EVIDENTIARY TEXT EXTRACTION [${selectedFile?.fileName}]. CONFIDENTIAL STAFF RECORDS. Employee ID: FNS-993. Clearance Rank: Level 4. Last modified date: 2026-07-30. Account balances cleared: $142,390. Server database connection ports: 5432, 8080. SQL query returned: 12 table records deleted.`
-      : selectedFile?.fileName.toLowerCase().includes('exif') || selectedFile?.fileName.toLowerCase().includes('jpg') || selectedFile?.fileName.toLowerCase().includes('png')
-      ? `TOP SECRET GPS COORDINATE VECTOR DETECTED [${selectedFile?.fileName}]. Reading system matrix: Exif geotags. Latitude: 28.6139, Longitude: 77.2090. Target name: New Delhi Workstation. Remote client sync date: 2026-07-28 08:12:00.`
-      : `FORENSIC DIGITAL EVIDENCE PAYLOAD [${selectedFile?.fileName}]. SHA-256 Digest Verified. System Ingestion Log: 2026-08-01 10:14:02. Connection sockets: Port 8080, Port 22.`
-  );
-
-  const extractedNumbers = fileExtractedData?.extracted_data?.numbers || Array.from(new Set((extractedTextContent.match(/\b\d+(?:\.\d+)?\b/g) || []).slice(0, 10)));
-  const extractedDates = fileExtractedData?.extracted_data?.dates || Array.from(new Set((extractedTextContent.match(/\b\d{4}[-/]\d{2}[-/]\d{2}\b|\b\d{2}[-/]\d{2}[-/]\d{4}\b/g) || []).slice(0, 5)));
+  // Actual extracted text only - NEVER inject fake Port 8080 or fake payload strings
+  const extractedTextContent = fileExtractedData?.extracted_text || '';
+  const extractedNumbers = fileExtractedData?.extracted_data?.numbers || [];
+  const extractedDates = fileExtractedData?.extracted_data?.dates || [];
+  const extractedTimes = fileExtractedData?.extracted_data?.times || [];
+  const extractedAmounts = fileExtractedData?.extracted_data?.amounts || [];
+  const extractedPeople = fileExtractedData?.extracted_data?.people || [];
+  const extractedIds = fileExtractedData?.extracted_data?.ids || [];
 
   // Mock Hex dump generator
   const getHexDump = (fileName) => {
@@ -495,7 +720,7 @@ const EvidenceViewer = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-extrabold text-foreground tracking-tight">Evidence Examiner & Viewer</h2>
-          <p className="text-xs text-muted">Inspect raw hex strings, syslog content, database columns, and image double-compresses</p>
+          <p className="text-xs text-muted">Inspect raw hex strings, syslog content, genuine OCR text, and cryptographic signatures</p>
         </div>
         
         {/* Selector */}
@@ -536,7 +761,7 @@ const EvidenceViewer = () => {
                   <span className="font-extrabold text-foreground">{(selectedFile.fileSize / (1024 * 1024)).toFixed(3)} MB</span>
                 </div>
                 <div>
-                  <span className="text-muted block font-semibold mb-0.5">SHA DEFAULT HASH</span>
+                  <span className="text-muted block font-semibold mb-0.5">SHA-256 HASH (FILE BYTES)</span>
                   <span className="font-mono text-muted select-all break-all">{selectedFile.sha256}</span>
                 </div>
 
@@ -636,20 +861,15 @@ const EvidenceViewer = () => {
                   {/* Categorized Displays */}
                   {selectedFile.fileType.includes('Image') ? (
                     <div className="flex flex-col items-center justify-center space-y-4">
-                      {/* Interactive Deepfake Heatmap Overlay */}
-                      <div className="relative border rounded-xl overflow-hidden shadow-lg border-danger/30 max-w-sm">
-                        <div className="w-[300px] h-[200px] bg-slate-350 dark:bg-slate-800 flex items-center justify-center text-muted font-bold text-xs">
+                      <div className="relative border rounded-xl overflow-hidden shadow-lg border-primary/30 max-w-sm">
+                        <div className="w-[300px] h-[200px] bg-slate-300 dark:bg-slate-800 flex items-center justify-center text-muted font-bold text-xs p-4 text-center">
                           {selectedFile.fileName}
                         </div>
-                        {/* Custom Grad-CAM tampered highlight box overlay */}
-                        <div className="absolute top-12 left-16 w-24 h-16 border-2 border-danger border-dashed bg-danger/10 flex items-center justify-center animate-pulse">
-                          <span className="text-[8px] bg-danger text-white px-1 leading-none font-bold">TAMPER MATRIX</span>
-                        </div>
                       </div>
-                      <div className="text-center p-3 max-w-md">
-                        <h4 className="text-xs font-bold text-danger">CV Manipulation Error Map (Quantization Noise Deviation)</h4>
+                      <div className="text-center p-2 max-w-md">
+                        <h4 className="text-xs font-bold text-foreground">Evidence File Container: {selectedFile.fileName}</h4>
                         <p className="text-[10px] text-muted mt-1 leading-relaxed">
-                          Highlighted quadrant indicates clone stamp pixel manipulations. Local CNN confidence rate is **94.2%**.
+                          To extract and examine text, dates, numbers, and identifiers, switch to the <strong>OCR Scanner</strong> tab.
                         </p>
                       </div>
                     </div>
@@ -709,99 +929,157 @@ const EvidenceViewer = () => {
                       <div className="flex items-center justify-between border-b pb-2 border-border/20">
                         <h4 className="text-xs font-bold text-foreground flex items-center gap-1 font-sans">
                           <FileText size={12} className="text-primary" />
-                          Extracted File Content & Text Payload
+                          Extracted Text Payload
                         </h4>
-                        <button
-                          onClick={() => navigator.clipboard.writeText(extractedTextContent)}
-                          className="px-2 py-1 text-[9px] border rounded bg-background/50 hover:bg-background/80 text-muted font-bold"
-                        >
-                          Copy Text
-                        </button>
+                        {extractedTextContent && (
+                          <button
+                            onClick={() => navigator.clipboard.writeText(extractedTextContent)}
+                            className="px-2 py-1 text-[9px] border rounded bg-background/50 hover:bg-background/80 text-muted font-bold"
+                          >
+                            Copy Text
+                          </button>
+                        )}
                       </div>
-                      <p className="text-foreground bg-background/50 p-3 rounded-lg border border-border/10 select-all font-mono">
-                        {extractedTextContent}
-                      </p>
+                      {extractedTextContent ? (
+                        <pre className="text-foreground bg-background/50 p-3 rounded-lg border border-border/10 select-all font-mono whitespace-pre-wrap break-words max-h-60 overflow-auto">
+                          {extractedTextContent}
+                        </pre>
+                      ) : (
+                        <div className="p-4 bg-background/40 border border-border/20 rounded-lg text-center space-y-2">
+                          <p className="text-xs text-muted font-sans">
+                            No OCR extraction record found for this evidence file yet.
+                          </p>
+                          <button
+                            onClick={() => setViewMode('OCR')}
+                            className="bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 px-3 py-1.5 rounded-lg text-xs font-bold font-sans transition-all inline-flex items-center gap-1"
+                          >
+                            <Search size={12} />
+                            Open OCR Scanner to Analyze
+                          </button>
+                        </div>
+                      )}
                     </div>
 
-                    {/* Isolated Numbers and Isolated Dates */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="p-3 border rounded-xl bg-background/30 space-y-2">
-                        <span className="text-[9px] font-bold text-muted uppercase block tracking-wider flex items-center gap-1">
-                          <BarChart3 size={11} className="text-primary" />
-                          Extracted Numbers
-                        </span>
-                        <div className="flex flex-wrap gap-1.5">
-                          {extractedNumbers.map((num, i) => (
-                            <span key={i} className="px-2 py-0.5 rounded border bg-background/50 font-mono text-[9px] text-foreground font-bold">
-                              {num}
+                    {/* Isolated Entities Grid (Numbers, Dates, Amounts, People) */}
+                    {(extractedNumbers.length > 0 || extractedDates.length > 0 || extractedAmounts.length > 0 || extractedPeople.length > 0) && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {extractedAmounts.length > 0 && (
+                          <div className="p-3 border rounded-xl bg-background/30 space-y-2">
+                            <span className="text-[9px] font-bold text-muted uppercase block tracking-wider flex items-center gap-1">
+                              <DollarSign size={11} className="text-primary" />
+                              Extracted Amounts
                             </span>
-                          ))}
-                        </div>
-                      </div>
+                            <div className="flex flex-wrap gap-1.5">
+                              {extractedAmounts.map((amt, i) => (
+                                <span key={i} className="px-2 py-0.5 rounded border border-primary/20 bg-primary/5 font-mono text-xs text-primary font-bold">
+                                  {amt}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
 
-                      <div className="p-3 border rounded-xl bg-background/30 space-y-2">
-                        <span className="text-[9px] font-bold text-muted uppercase block tracking-wider flex items-center gap-1">
-                          <Calendar size={11} className="text-primary" />
-                          Extracted Dates
-                        </span>
-                        <div className="flex flex-wrap gap-1.5">
-                          {extractedDates.map((dt, i) => (
-                            <span key={i} className="px-2 py-0.5 rounded border border-primary/20 bg-primary/5 font-mono text-[9px] text-primary font-bold flex items-center gap-1">
-                              <Calendar size={8} />
-                              {dt}
+                        {extractedPeople.length > 0 && (
+                          <div className="p-3 border rounded-xl bg-background/30 space-y-2">
+                            <span className="text-[9px] font-bold text-muted uppercase block tracking-wider flex items-center gap-1">
+                              <UserCheck size={11} className="text-primary" />
+                              Extracted People / Beneficiaries
                             </span>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
+                            <div className="flex flex-wrap gap-1.5">
+                              {extractedPeople.map((p, i) => (
+                                <span key={i} className="px-2 py-0.5 rounded border bg-background/50 font-sans text-xs text-foreground font-bold">
+                                  {p}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
 
+                        {extractedDates.length > 0 && (
+                          <div className="p-3 border rounded-xl bg-background/30 space-y-2">
+                            <span className="text-[9px] font-bold text-muted uppercase block tracking-wider flex items-center gap-1">
+                              <Calendar size={11} className="text-primary" />
+                              Extracted Dates
+                            </span>
+                            <div className="flex flex-wrap gap-1.5">
+                              {extractedDates.map((dt, i) => (
+                                <span key={i} className="px-2 py-0.5 rounded border border-primary/20 bg-primary/5 font-mono text-[9px] text-primary font-bold flex items-center gap-1">
+                                  <Calendar size={8} />
+                                  {dt}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {extractedNumbers.length > 0 && (
+                          <div className="p-3 border rounded-xl bg-background/30 space-y-2">
+                            <span className="text-[9px] font-bold text-muted uppercase block tracking-wider flex items-center gap-1">
+                              <BarChart3 size={11} className="text-primary" />
+                              Extracted Numbers
+                            </span>
+                            <div className="flex flex-wrap gap-1.5">
+                              {extractedNumbers.slice(0, 10).map((num, i) => (
+                                <span key={i} className="px-2 py-0.5 rounded border bg-background/50 font-mono text-[9px] text-foreground font-bold">
+                                  {num}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
-
                 </div>
               )}
 
-              {/* Mode 2: Hex dump view */}
+              {/* Mode 2: Hex view */}
               {viewMode === 'HEX' && (
-                <div className="space-y-4 font-mono text-[11px] bg-slate-900 text-slate-350 p-4 rounded-xl shadow-inner border border-slate-800 animate-fade-in">
-                  <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-2 text-slate-500">
-                    <span>Offset</span>
-                    <span>Hex Values (00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F)</span>
-                    <span>Decoded ASCII</span>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between border-b pb-3">
+                    <div>
+                      <h4 className="text-xs font-bold text-foreground">Hexadecimal Payload Stream</h4>
+                      <p className="text-[10px] text-muted">Offsets mapped against binary evidence block memory</p>
+                    </div>
+                    <select
+                      value={hexOffsetLimit}
+                      onChange={(e) => setHexOffsetLimit(Number(e.target.value))}
+                      className="bg-background border rounded px-2 py-1 text-[10px] font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                    >
+                      <option value={64}>64 Bytes</option>
+                      <option value={128}>128 Bytes</option>
+                      <option value={256}>256 Bytes</option>
+                      <option value={512}>512 Bytes</option>
+                    </select>
                   </div>
 
-                  <div className="space-y-1 max-h-[340px] overflow-y-auto">
-                    {getHexDump(selectedFile.fileName).map((line) => (
-                      <div key={line.offset} className="flex justify-between hover:bg-slate-800/50 py-0.5 rounded transition-all">
-                        <span className="text-[#3b82f6]">{line.offset}</span>
-                        <span className="text-emerald-500 select-all font-semibold uppercase">{line.hex}</span>
-                        <span className="text-indigo-400 select-all">{line.ascii}</span>
+                  <div className="font-mono text-[10px] leading-relaxed bg-card/60 p-4 border rounded-xl space-y-1 overflow-x-auto select-all">
+                    {getHexDump(selectedFile.fileName).map((row) => (
+                      <div key={row.offset} className="flex gap-4 hover:bg-primary/5 px-1 rounded">
+                        <span className="text-primary font-bold select-none">{row.offset}</span>
+                        <span className="text-muted tracking-widest">{row.hex}</span>
+                        <span className="text-foreground border-l pl-4 font-bold select-none">{row.ascii}</span>
                       </div>
                     ))}
                   </div>
-
-                  <div className="text-right pt-2 border-t border-slate-800 text-[10px] text-slate-500">
-                    Loaded {hexOffsetLimit} offsets.{' '}
-                    <button 
-                      onClick={() => setHexOffsetLimit(prev => prev + 128)}
-                      className="text-primary hover:underline hover:text-accent font-bold"
-                    >
-                      Inspect Next 128 bytes
-                    </button>
-                  </div>
                 </div>
               )}
 
-              {/* Mode 3: OCR Engine Comparison view */}
+              {/* Mode 3: Real Multi-Engine OCR Scanner */}
               {viewMode === 'OCR' && (
-                <EvidenceOCRPanel selectedFile={selectedFile} selectedCaseId={selectedCaseId} backendActive={backendActive} />
+                <EvidenceOCRPanel 
+                  selectedFile={selectedFile}
+                  selectedCaseId={selectedCaseId}
+                  backendActive={backendActive}
+                />
               )}
 
             </div>
           </div>
         </div>
       ) : (
-        <div className="border border-dashed p-10 rounded-2xl text-center text-muted">
-          No active case forensic files loaded inside this workspace. Ingest files first.
+        <div className="p-12 text-center text-muted border border-dashed rounded-2xl">
+          <p className="text-xs">Select or ingest evidence to begin forensic verification.</p>
         </div>
       )}
     </div>

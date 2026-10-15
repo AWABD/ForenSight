@@ -4,14 +4,27 @@ from pydantic import BaseModel, ConfigDict
 
 class OCRComparisonMetrics(BaseModel):
     engine_name: str
-    inference_time_seconds: float
-    confidence_score: float
-    accuracy_rating: str
+    status: str = "SUCCESS"  # SUCCESS | FAILED | NOT_AVAILABLE
+    inference_time_seconds: float = 0.0
+    confidence_score: float = 0.0  # Real mean confidence (0.0 - 100.0)
+    detected_blocks_count: int = 0
+    error_message: Optional[str] = None
 
 class OCRExtractedData(BaseModel):
-    tables: List[Any] = []
-    numbers: List[str] = []
     dates: List[str] = []
+    times: List[str] = []
+    amounts: List[str] = []
+    people: List[str] = []
+    ids: List[str] = []
+    upi_ids: List[str] = []
+    emails: List[str] = []
+    urls: List[str] = []
+    banking_details: List[str] = []
+    status_signals: List[str] = []
+    numbers: List[str] = []
+    tables: List[Any] = []
+    uncertain_extractions: List[Dict[str, Any]] = []
+    file_sha256: Optional[str] = None
 
 class OCRTextOut(BaseModel):
     id: str
@@ -29,3 +42,7 @@ class OCRResponse(BaseModel):
     record: OCRTextOut
     extracted_data: OCRExtractedData
     comparison: Dict[str, OCRComparisonMetrics]
+    cross_engine_agreement: Optional[float] = None
+    file_sha256: Optional[str] = None
+    raw_paddle_text: Optional[str] = None
+    raw_easy_text: Optional[str] = None

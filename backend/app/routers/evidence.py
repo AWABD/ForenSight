@@ -228,7 +228,11 @@ def run_ocr_on_evidence(
     return {
         "record": db_ocr,
         "extracted_data": ocr_result["extracted_data"],
-        "comparison": ocr_result["comparison"]
+        "comparison": ocr_result["comparison"],
+        "cross_engine_agreement": ocr_result.get("cross_engine_agreement"),
+        "file_sha256": ocr_result.get("file_sha256") or evidence.sha256_hash,
+        "raw_paddle_text": ocr_result.get("raw_paddle_text"),
+        "raw_easy_text": ocr_result.get("raw_easy_text")
     }
 
 @router.get("/{evidence_id}/ocr", response_model=List[OCRTextOut])
