@@ -482,12 +482,12 @@ const ReportViewer = () => {
                             {uncertain.length > 0 && (
                               <div className="p-2 bg-amber-50/50 border border-amber-200 rounded-lg space-y-1">
                                 <span className="text-[8.5px] font-black uppercase text-amber-800 flex items-center gap-1">
-                                  <AlertCircle size={10} className="text-amber-600" /> Uncertain Extractions (<60% confidence):
+                                  <AlertCircle size={10} className="text-amber-600" /> Uncertain Extractions (&lt;60% confidence):
                                 </span>
                                 <div className="flex flex-wrap gap-1 font-mono text-[10px]">
                                   {uncertain.map((u, i) => (
                                     <span key={i} className="bg-amber-100 border border-amber-300 px-2 py-0.5 rounded text-amber-950">
-                                      {u}
+                                      {typeof u === 'object' && u ? `${u.text} (${u.confidence}%)` : String(u)}
                                     </span>
                                   ))}
                                 </div>

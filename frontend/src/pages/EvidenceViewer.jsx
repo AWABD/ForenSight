@@ -514,7 +514,7 @@ const EvidenceOCRPanel = ({ selectedFile, selectedCaseId, backendActive }) => {
                 <div className="flex flex-wrap gap-1.5 pt-1">
                   {ocrData.extractedData.uncertain_extractions.map((u, i) => (
                     <span key={i} className="px-2 py-0.5 rounded border border-amber-500/30 bg-background/50 font-mono text-[9.5px]">
-                      "{u.text}" ({u.confidence}% conf)
+                      {typeof u === 'object' && u ? `"${u.text}" (${u.confidence}% conf)` : String(u)}
                     </span>
                   ))}
                 </div>
