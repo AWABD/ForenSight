@@ -143,8 +143,12 @@ const EvidenceUpload = () => {
           return;
         }
 
-        // Apply file upload to context state
-        addEvidenceFile(targetCaseId, file);
+        // Apply file upload to context state: ensure target UUID is resolved
+        const chosenCase = cases.find(c => c.id === targetCaseId || c.caseNumber === targetCaseId) || 
+                           cases.find(c => c.id === selectedCaseId || c.caseNumber === selectedCaseId) || 
+                           activeCase;
+        const finalCaseId = chosenCase?.id || targetCaseId;
+        addEvidenceFile(finalCaseId, file);
         
         // Calculate hash key mapping (mimic backend SHA hashes)
         const mockSHA256 = `f8c3c4d1de0ba3f1a0e1c6b54a8e2bc70c67feaae8${Math.floor(1000 + Math.random()*9000).toString(16)}`;

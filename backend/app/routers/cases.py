@@ -9,6 +9,7 @@ from app.models.user import User
 from app.schemas.case import CaseCreate, CaseOut, CaseUpdate
 from app.services.auth_service import get_current_user, RoleChecker
 from app.services.audit_service import AuditService
+from app.services.case_service import CaseService
 from app.utils.logging_config import logger
 
 router = APIRouter(prefix="/cases", tags=["Case Management"])
@@ -129,10 +130,8 @@ def get_case(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Retrieves specific case by UUID."""
-    case = db.query(Case).filter(Case.id == case_id).first()
-    if not case:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
+    """Retrieves specific case by UUID, case number, or display alias."""
+    case = CaseService.resolve_case(db, case_id)
         
     stats = calculate_case_stats(case)
     return CaseOut(
@@ -156,9 +155,7 @@ def update_case(
     current_user: User = Depends(RoleChecker(["SysAdmin", "LeadInvestigator"]))
 ):
     """Updates case properties (Requires level >= 3)."""
-    case = db.query(Case).filter(Case.id == case_id).first()
-    if not case:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
+    case = CaseService.resolve_case(db, case_id)
         
     # Apply updates
     if case_in.title is not None:
@@ -207,10 +204,8 @@ def delete_case(
     """
     Deletes a forensic case (Strictly restricted to Level 4 - SysAdmin only).
     """
-    case = db.query(Case).filter(Case.id == case_id).first()
-    if not case:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
-        
+    case = CaseService.resolve_case(db, case_id)
+    resolved_id = case.id
     case_num = case.case_number
     db.delete(case)
     db.commit()
@@ -220,7 +215,7 @@ def delete_case(
         db=db,
         action_type=f"CASE_DELETED: {case_num}",
         operator_id=current_user.id,
-        associated_item_id=case_id
+        associated_item_id=resolved_id
     )
     
     logger.info(f"Forensic case deleted. Case Number: {case_num}, Deleted By SysAdmin: {current_user.email}")

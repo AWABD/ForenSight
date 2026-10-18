@@ -4,7 +4,7 @@ import { Network, ArrowRight, User, Globe, File, ShieldAlert, Video, Music, Imag
 
 const RelationshipGraph = () => {
   const { activeCase, cases, caseEvidence } = useProject();
-  const [selectedCaseId, setSelectedCaseId] = useState(activeCase.id || 'c1');
+  const [selectedCaseId, setSelectedCaseId] = useState(activeCase?.id || cases[0]?.id || '91ddaa5c-48a7-4822-b3e7-83265af9f251');
   const [selectedNodeId, setSelectedNodeId] = useState(null);
 
   // Active target case

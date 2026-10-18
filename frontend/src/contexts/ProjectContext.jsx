@@ -15,9 +15,17 @@ const generateHash = (fileName) => {
   return `f8c3c4d1de0ba3f1a0e1c6b54a8e2bc70c67feaa${hex}`;
 };
 
+export const SEED_CASE_UUIDS = {
+  c1: '91ddaa5c-48a7-4822-b3e7-83265af9f251',
+  c2: '03b95b27-98d5-4e72-86e0-1553229e6b03',
+  c3: 'ac29c4d5-58b6-40f2-827f-ffe05c4276fa',
+  c4: '26406052-07d6-402f-a3cb-4ed458bf132a',
+  c5: 'ef876a5c-90d1-485b-a228-a756ca95ef3a',
+};
+
 const initialCases = [
   {
-    id: 'c1',
+    id: SEED_CASE_UUIDS.c1,
     caseNumber: 'FS-2026-091',
     title: 'Financial Embezzlement & Wire Fraud',
     description: 'Corporate financial forensic audit regarding unapproved transactions from the staging deployment portal.',
@@ -29,7 +37,7 @@ const initialCases = [
     anomalyRate: '32%'
   },
   {
-    id: 'c2',
+    id: SEED_CASE_UUIDS.c2,
     caseNumber: 'FS-2026-104',
     title: 'Deepfake Tampering & IP Theft',
     description: 'Investigation of manipulated verification records, compromised source systems, and EXIF spoofing vectors.',
@@ -41,7 +49,7 @@ const initialCases = [
     anomalyRate: '75%'
   },
   {
-    id: 'c3',
+    id: SEED_CASE_UUIDS.c3,
     caseNumber: 'FS-2026-112',
     title: 'Surveillance CCTV & Facility Perimeter Leak',
     description: 'Physical perimeter access breach and tampered video feed frame drops at Substation Alpha.',
@@ -53,7 +61,7 @@ const initialCases = [
     anomalyRate: '50%'
   },
   {
-    id: 'c4',
+    id: SEED_CASE_UUIDS.c4,
     caseNumber: 'FS-2026-128',
     title: 'Classified Wire Intercept & Signal Spool',
     description: 'Encrypted satellite channel telemetry extraction and unauthorized frequency hopping capture.',
@@ -65,7 +73,7 @@ const initialCases = [
     anomalyRate: '60%'
   },
   {
-    id: 'c5',
+    id: SEED_CASE_UUIDS.c5,
     caseNumber: 'FS-2026-140',
     title: 'Sovereign Ransomware & Master Key Intrusion',
     description: 'Zero-day ransomware payload analysis targeting master key distribution servers.',
@@ -264,6 +272,19 @@ const initialTimeline = {
   ]
 };
 
+// Populate UUID alias keys for seamless offline/initial matching
+initialEvidence[SEED_CASE_UUIDS.c1] = initialEvidence['c1'];
+initialEvidence[SEED_CASE_UUIDS.c2] = initialEvidence['c2'];
+initialEvidence[SEED_CASE_UUIDS.c3] = initialEvidence['c3'];
+initialEvidence[SEED_CASE_UUIDS.c4] = initialEvidence['c4'];
+initialEvidence[SEED_CASE_UUIDS.c5] = initialEvidence['c5'];
+
+initialTimeline[SEED_CASE_UUIDS.c1] = initialTimeline['c1'];
+initialTimeline[SEED_CASE_UUIDS.c2] = initialTimeline['c2'];
+initialTimeline[SEED_CASE_UUIDS.c3] = initialTimeline['c3'];
+initialTimeline[SEED_CASE_UUIDS.c4] = initialTimeline['c4'];
+initialTimeline[SEED_CASE_UUIDS.c5] = initialTimeline['c5'];
+
 const initialLogs = [
   { id: 'l1', timestamp: '2026-07-31T06:00:20Z', operator: 'Lead Investigator Dr. A. Sharma', action: 'Uploaded db_ledger_dump.sqlite', blockHash: '8b9d88...efa312' },
   { id: 'l2', timestamp: '2026-07-31T06:05:44Z', operator: 'ForenSight Core Engine', action: 'Computed baseline SHA-256 checks', blockHash: 'ff9d3a...bd2291' }
@@ -271,7 +292,7 @@ const initialLogs = [
 
 export const ProjectProvider = ({ children }) => {
   const [cases, setCases] = useState(initialCases);
-  const [selectedCaseId, setSelectedCaseId] = useState('c1');
+  const [selectedCaseId, setSelectedCaseId] = useState(SEED_CASE_UUIDS.c1);
   const [evidence, setEvidence] = useState(initialEvidence);
   const [timeline, setTimeline] = useState(initialTimeline);
   const [auditLogs, setAuditLogs] = useState(initialLogs);
@@ -429,9 +450,13 @@ export const ProjectProvider = ({ children }) => {
     return () => clearInterval(interval);
   }, [selectedCaseId]);
 
-  const activeCase = cases.find(c => c.id === selectedCaseId) || cases[0] || initialCases[0];
-  const caseEvidence = evidence[selectedCaseId] || [];
-  const caseTimeline = timeline[selectedCaseId] || [];
+  const activeCase = cases.find(c => c.id === selectedCaseId || c.caseNumber === selectedCaseId) || 
+                     (selectedCaseId && SEED_CASE_UUIDS[selectedCaseId] ? cases.find(c => c.id === SEED_CASE_UUIDS[selectedCaseId]) : null) ||
+                     (selectedCaseId === 'c1' ? cases[0] : null) ||
+                     cases[0] || 
+                     initialCases[0];
+  const caseEvidence = evidence[selectedCaseId] || (activeCase && evidence[activeCase.id]) || [];
+  const caseTimeline = timeline[selectedCaseId] || (activeCase && timeline[activeCase.id]) || [];
 
   const addCase = async (newCase) => {
     const token = localStorage.getItem('token');
@@ -490,12 +515,18 @@ export const ProjectProvider = ({ children }) => {
     const token = localStorage.getItem('token');
     const authHeader = token ? { 'Authorization': `Bearer ${token}` } : {};
 
+    // Safely resolve target case to its genuine database UUID
+    const matched = cases.find(c => c.id === caseId || c.caseNumber === caseId) ||
+                    (caseId && SEED_CASE_UUIDS[caseId] ? cases.find(c => c.id === SEED_CASE_UUIDS[caseId]) : null) ||
+                    (caseId === 'c1' ? cases[0] : null);
+    const targetUUID = matched?.id || (SEED_CASE_UUIDS[caseId] || caseId);
+
     if (backendActive) {
       try {
         const formData = new FormData();
         formData.append('file', file);
 
-        const response = await fetch(`${API_BASE_URL}/cases/${caseId}/evidence/upload`, {
+        const response = await fetch(`${API_BASE_URL}/cases/${targetUUID}/evidence/upload`, {
           method: 'POST',
           headers: authHeader,
           body: formData
@@ -505,7 +536,7 @@ export const ProjectProvider = ({ children }) => {
           await refreshData();
           return;
         } else {
-          const errData = await response.json();
+          const errData = await response.json().catch(() => ({}));
           alert(`Ingest Blocked: ${errData.detail || 'Upload Failed'}`);
         }
       } catch (err) {
@@ -530,13 +561,16 @@ export const ProjectProvider = ({ children }) => {
 
     const updated = {
       ...evidence,
-      [caseId]: [...(evidence[caseId] || []), newFile]
+      [targetUUID]: [...(evidence[targetUUID] || []), newFile]
     };
+    if (caseId !== targetUUID) {
+      updated[caseId] = [...(evidence[caseId] || []), newFile];
+    }
     setEvidence(updated);
 
     // Update case file count
     setCases(prev => prev.map(c => {
-      if (c.id === caseId) {
+      if (c.id === targetUUID || c.id === caseId) {
         return { ...c, evidenceCount: c.evidenceCount + 1 };
       }
       return c;
@@ -552,10 +586,14 @@ export const ProjectProvider = ({ children }) => {
       severity: 'INFO'
     };
 
-    setTimeline({
+    const updatedTimeline = {
       ...timeline,
-      [caseId]: [...(timeline[caseId] || []), newEvent]
-    });
+      [targetUUID]: [...(timeline[targetUUID] || []), newEvent]
+    };
+    if (caseId !== targetUUID) {
+      updatedTimeline[caseId] = [...(timeline[caseId] || []), newEvent];
+    }
+    setTimeline(updatedTimeline);
 
     appendAuditLog(`Ingested file ${file.name} into case vault. SHA256: ${newFile.sha256.substring(0, 12)}...`);
   };
@@ -564,9 +602,14 @@ export const ProjectProvider = ({ children }) => {
     const token = localStorage.getItem('token');
     const authHeader = token ? { 'Authorization': `Bearer ${token}` } : {};
 
+    const matched = cases.find(c => c.id === caseId || c.caseNumber === caseId) ||
+                    (caseId && SEED_CASE_UUIDS[caseId] ? cases.find(c => c.id === SEED_CASE_UUIDS[caseId]) : null) ||
+                    (caseId === 'c1' ? cases[0] : null);
+    const targetUUID = matched?.id || (SEED_CASE_UUIDS[caseId] || caseId);
+
     if (backendActive) {
       try {
-        const response = await fetch(`${API_BASE_URL}/cases/${caseId}/evidence/${evidenceId}`, {
+        const response = await fetch(`${API_BASE_URL}/cases/${targetUUID}/evidence/${evidenceId}`, {
           method: 'DELETE',
           headers: authHeader
         });
@@ -581,10 +624,16 @@ export const ProjectProvider = ({ children }) => {
     }
 
     // Local state fallback
-    setEvidence(prev => ({
-      ...prev,
-      [caseId]: (prev[caseId] || []).filter(e => e.id !== evidenceId)
-    }));
+    setEvidence(prev => {
+      const nextEv = {
+        ...prev,
+        [targetUUID]: (prev[targetUUID] || []).filter(e => e.id !== evidenceId)
+      };
+      if (caseId !== targetUUID) {
+        nextEv[caseId] = (prev[caseId] || []).filter(e => e.id !== evidenceId);
+      }
+      return nextEv;
+    });
     appendAuditLog(`Purged evidence file ID ${evidenceId} from case vault.`);
     return true;
   };

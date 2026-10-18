@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 
 const isUUID = (str) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str || '');
+const isValidCaseIdentifier = (str) => typeof str === 'string' && (isUUID(str) || /^c\d+$/i.test(str.trim()) || /^FS-\d{4}-\d+$/i.test(str.trim()));
 
 // Sub-component for the OCR Examiner & Comparison Module
 const EvidenceOCRPanel = ({ selectedFile, selectedCaseId, backendActive }) => {
@@ -23,7 +24,7 @@ const EvidenceOCRPanel = ({ selectedFile, selectedCaseId, backendActive }) => {
   useEffect(() => {
     setOcrData(null);
     setScanError(null);
-    if (backendActive && isUUID(selectedCaseId) && isUUID(selectedFile?.id)) {
+    if (backendActive && isValidCaseIdentifier(selectedCaseId) && isUUID(selectedFile?.id)) {
       const token = localStorage.getItem('token');
       const authHeader = token ? { 'Authorization': `Bearer ${token}` } : {};
       
@@ -102,7 +103,7 @@ const EvidenceOCRPanel = ({ selectedFile, selectedCaseId, backendActive }) => {
     const authHeader = token ? { 'Authorization': `Bearer ${token}` } : {};
 
     try {
-      if (backendActive && isUUID(selectedCaseId) && isUUID(selectedFile?.id)) {
+      if (backendActive && isValidCaseIdentifier(selectedCaseId) && isUUID(selectedFile?.id)) {
         const response = await fetch(`${API_BASE_URL}/cases/${selectedCaseId}/evidence/${selectedFile.id}/ocr`, {
           method: 'POST',
           headers: {
@@ -657,7 +658,7 @@ const EvidenceViewer = () => {
   // Fetch extracted OCR / Content record on evidence file change
   useEffect(() => {
     setFileExtractedData(null);
-    if (backendActive && isUUID(selectedCaseId) && isUUID(selectedFile?.id)) {
+    if (backendActive && isValidCaseIdentifier(selectedCaseId) && isUUID(selectedFile?.id)) {
       const token = localStorage.getItem('token');
       const authHeader = token ? { 'Authorization': `Bearer ${token}` } : {};
 

@@ -15,6 +15,7 @@ from app.utils.logging_config import logger
 from app.models.ocr import OCRText
 from app.schemas.ocr import OCRResponse, OCRTextOut
 from app.services.ocr_service import OCRService
+from app.services.case_service import CaseService
 
 router = APIRouter(prefix="/cases/{case_id}/evidence", tags=["Evidence Management"])
 
@@ -42,17 +43,15 @@ def upload_evidence(
             detail="File exceeds maximum size limit of 100MB."
         )
 
-    # Verify case exists
-    case = db.query(Case).filter(Case.id == case_id).first()
-    if not case:
-        logger.warning(f"Upload error: target case UUID '{case_id}' does not exist")
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
+    # Verify and resolve case (supports UUID, display alias 'c1', or case_number)
+    case = CaseService.resolve_case(db, case_id)
+    resolved_case_id = case.id
 
     try:
         # Save upload to local secure vault and compute dual hashes
-        target_path, size_bytes, sha256_hex, sha3_hex = FileService.save_and_hash_file(case_id, file)
+        target_path, size_bytes, sha256_hex, sha3_hex = FileService.save_and_hash_file(resolved_case_id, file)
     except ValueError as val_err:
-        logger.warning(f"File validation rejected for upload in case '{case_id}': {val_err}")
+        logger.warning(f"File validation rejected for upload in case '{resolved_case_id}': {val_err}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(val_err)
@@ -66,12 +65,12 @@ def upload_evidence(
 
     # Check if this exact file (same SHA256) is already uploaded to this case
     duplicate = db.query(EvidenceFile).filter(
-        EvidenceFile.case_id == case_id,
+        EvidenceFile.case_id == resolved_case_id,
         EvidenceFile.sha256_hash == sha256_hex
     ).first()
     
     if duplicate:
-        logger.warning(f"Duplicate upload skipped: file with SHA256 '{sha256_hex}' already exists in case")
+        logger.warning(f"Duplicate upload skipped: file with SHA256 '{sha256_hex}' already exists in case '{resolved_case_id}'")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Duplicate file error: A file with identical SHA256 hash already exists in this case."
@@ -85,7 +84,7 @@ def upload_evidence(
 
     # Create Evidence File Database Record
     new_evidence = EvidenceFile(
-        case_id=case_id,
+        case_id=resolved_case_id,
         file_name=sanitized_filename,
         original_path=file.filename, # Track unsanitized name as logical original path mapping
         file_size_bytes=size_bytes,
@@ -118,7 +117,7 @@ def upload_evidence(
 
     # Add dynamic Timeline Event representing file ingestion
     new_timeline_event = TimelineEvent(
-        case_id=case_id,
+        case_id=resolved_case_id,
         evidence_file_id=new_evidence.id,
         timestamp_source="System Ingestion Engine",
         event_type="FILE_INGEST",
@@ -146,11 +145,8 @@ def list_evidence(
     current_user: User = Depends(RoleChecker(["SysAdmin", "LeadInvestigator", "Analyst", "LegalAuditor"]))
 ):
     """Lists all evidence files linked to a specific case."""
-    case = db.query(Case).filter(Case.id == case_id).first()
-    if not case:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
-        
-    return db.query(EvidenceFile).filter(EvidenceFile.case_id == case_id).all()
+    case = CaseService.resolve_case(db, case_id)
+    return db.query(EvidenceFile).filter(EvidenceFile.case_id == case.id).all()
 
 @router.get("/{evidence_id}", response_model=EvidenceOut)
 def get_evidence(
@@ -160,8 +156,12 @@ def get_evidence(
     current_user: User = Depends(RoleChecker(["SysAdmin", "LeadInvestigator", "Analyst", "LegalAuditor"]))
 ):
     """Fetches details of a specific evidence file by UUID."""
+    case = CaseService.resolve_case(db, case_id)
+    if not CaseService.is_valid_uuid(evidence_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evidence file not found")
+
     evidence = db.query(EvidenceFile).filter(
-        EvidenceFile.case_id == case_id,
+        EvidenceFile.case_id == case.id,
         EvidenceFile.id == evidence_id
     ).first()
     
@@ -182,8 +182,12 @@ def run_ocr_on_evidence(
     Runs EasyOCR and PaddleOCR comparison vectors, extracts Text, Tables, Numbers, Dates.
     Saves outputs to the database and appends ledger blocks.
     """
+    case = CaseService.resolve_case(db, case_id)
+    if not CaseService.is_valid_uuid(evidence_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evidence file not found")
+
     evidence = db.query(EvidenceFile).filter(
-        EvidenceFile.case_id == case_id,
+        EvidenceFile.case_id == case.id,
         EvidenceFile.id == evidence_id
     ).first()
     
@@ -206,7 +210,7 @@ def run_ocr_on_evidence(
     
     # Record timeline action
     new_timeline_event = TimelineEvent(
-        case_id=case_id,
+        case_id=case.id,
         evidence_file_id=evidence.id,
         timestamp_source="AI OCR Engine",
         event_type="AI_INFERENCE",
@@ -243,8 +247,12 @@ def get_ocr_records(
     current_user: User = Depends(RoleChecker(["SysAdmin", "LeadInvestigator", "Analyst", "LegalAuditor"]))
 ):
     """Retrieves all saved OCR scanner outputs for specific evidence file."""
+    case = CaseService.resolve_case(db, case_id)
+    if not CaseService.is_valid_uuid(evidence_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evidence file not found")
+
     evidence = db.query(EvidenceFile).filter(
-        EvidenceFile.case_id == case_id,
+        EvidenceFile.case_id == case.id,
         EvidenceFile.id == evidence_id
     ).first()
     
@@ -267,8 +275,12 @@ def delete_evidence(
     """
     Deletes an evidence file (Strictly restricted to Level 4 - SysAdmin only).
     """
+    case = CaseService.resolve_case(db, case_id)
+    if not CaseService.is_valid_uuid(evidence_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evidence file not found")
+
     evidence = db.query(EvidenceFile).filter(
-        EvidenceFile.case_id == case_id,
+        EvidenceFile.case_id == case.id,
         EvidenceFile.id == evidence_id
     ).first()
     

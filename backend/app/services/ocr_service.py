@@ -291,6 +291,15 @@ class OCRService:
                 }
             }
 
+        # Default variable initializations for safe extraction across all document/image types
+        raw_paddle_text = ""
+        raw_easy_text = ""
+        cross_agreement = None
+        chosen_boxes = []
+        primary_conf = 0.0
+        paddle_data = {"status": "NOT_RUN", "time": 0.0, "conf": 0.0, "lines": [], "boxes": [], "scores": [], "error": None}
+        easy_data = {"status": "NOT_RUN", "time": 0.0, "conf": 0.0, "lines": [], "boxes": [], "scores": [], "error": None}
+
         # =========================================================================
         # 1. IMAGE OCR EXTRACTION (PADDLEOCR & EASYOCR)
         # =========================================================================

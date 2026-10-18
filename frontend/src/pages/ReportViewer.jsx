@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 
 const isUUID = (str) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str || '');
+const isValidCaseIdentifier = (str) => typeof str === 'string' && (isUUID(str) || /^c\d+$/i.test(str.trim()) || /^FS-\d{4}-\d+$/i.test(str.trim()));
 
 const ReportViewer = () => {
   const { cases, activeCase, selectedCaseId, setSelectedCaseId, caseEvidence, caseTimeline, backendActive } = useProject();
@@ -22,7 +23,8 @@ const ReportViewer = () => {
   // Fetch actual extracted OCR & content records for all evidence in active case
   useEffect(() => {
     setExtractedEvidenceMap({});
-    if (backendActive && isUUID(selectedCaseId) && caseEvidence && caseEvidence.length > 0) {
+    const effectiveCaseId = activeCase?.id || selectedCaseId;
+    if (backendActive && isValidCaseIdentifier(effectiveCaseId) && caseEvidence && caseEvidence.length > 0) {
       setLoadingOCR(true);
       const token = localStorage.getItem('token');
       const authHeader = token ? { 'Authorization': `Bearer ${token}` } : {};
@@ -32,7 +34,7 @@ const ReportViewer = () => {
         for (const file of caseEvidence) {
           if (isUUID(file.id)) {
             try {
-              const res = await fetch(`${API_BASE_URL}/cases/${selectedCaseId}/evidence/${file.id}/ocr`, { headers: authHeader });
+              const res = await fetch(`${API_BASE_URL}/cases/${effectiveCaseId}/evidence/${file.id}/ocr`, { headers: authHeader });
               if (res.ok) {
                 const data = await res.json();
                 if (Array.isArray(data) && data.length > 0) {

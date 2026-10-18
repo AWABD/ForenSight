@@ -33,7 +33,16 @@ venv.bak/
 storage_vault/
 verification_vault/
 verification_test.db
+test_resolution.db
+test_resolution_vault/
 *.db
 backend/verification_test.db
 backend/verification_vault/
 backend/storage_vault/
+backend/test_resolution.db
+backend/test_resolution_vault/
+
+# IDE & Editor files
+.idea/
+.vscode/
+scratch/
