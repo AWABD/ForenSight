@@ -37,6 +37,9 @@ const EvidenceOCRPanel = ({ selectedFile, selectedCaseId, backendActive }) => {
             
             setOcrData({
               extractedText: lastRecord.extracted_text || '',
+              mediaClassification: extData.media_classification || null,
+              threatIntelligence: extData.threat_intelligence || null,
+              threats: extData.threats || [],
               extractedData: {
                 dates: extData.dates || [],
                 times: extData.times || [],
@@ -50,6 +53,7 @@ const EvidenceOCRPanel = ({ selectedFile, selectedCaseId, backendActive }) => {
                 status_signals: extData.status_signals || [],
                 numbers: extData.numbers || [],
                 tables: extData.tables || [],
+                threats: extData.threats || [],
                 uncertain_extractions: extData.uncertain_extractions || []
               },
               comparison: extData.engine_comparison || {
@@ -119,6 +123,9 @@ const EvidenceOCRPanel = ({ selectedFile, selectedCaseId, backendActive }) => {
           const extData = resData.extracted_data || {};
           setOcrData({
             extractedText: resData.record?.extracted_text || resData.extracted_text || "No text detected",
+            mediaClassification: extData.media_classification || null,
+            threatIntelligence: extData.threat_intelligence || null,
+            threats: extData.threats || [],
             extractedData: {
               dates: extData.dates || [],
               times: extData.times || [],
@@ -132,6 +139,7 @@ const EvidenceOCRPanel = ({ selectedFile, selectedCaseId, backendActive }) => {
               status_signals: extData.status_signals || [],
               numbers: extData.numbers || [],
               tables: extData.tables || [],
+              threats: extData.threats || [],
               uncertain_extractions: extData.uncertain_extractions || []
             },
             comparison: resData.comparison || {},
@@ -215,6 +223,68 @@ const EvidenceOCRPanel = ({ selectedFile, selectedCaseId, backendActive }) => {
       {/* OCR scan results */}
       {ocrData && (
         <div className="space-y-6 animate-fade-in">
+
+          {/* Crime Scene Media Banner (Physical Evidence, Shooting, Weapons) */}
+          {(ocrData.mediaClassification?.media_class === 'CRIME_SCENE_MEDIA' || selectedFile?.anomalies?.some(a => a.type === 'CRIME_SCENE_MEDIA')) && (
+            <div className="p-4 border-2 border-danger/40 bg-danger/10 rounded-2xl flex items-start gap-3 shadow-sm">
+              <AlertTriangle size={22} className="text-danger flex-shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] bg-danger text-white font-black px-2 py-0.5 rounded uppercase">CRIME SCENE MEDIA</span>
+                  <span className="text-xs font-bold text-danger">Physical Evidence (Non-Document Photograph)</span>
+                </div>
+                <p className="text-xs text-foreground/90 leading-relaxed">
+                  This photograph represents physical crime scene evidence (e.g. suspected shooting, weapon, or violent incident). Optical Character Recognition (OCR) is specialized for text documents and receipts, and is not applicable to physical scene actions.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Plain Text Document Banner */}
+          {(ocrData.mediaClassification?.media_class === 'DIGITAL_TEXT_DOCUMENT' || selectedFile?.fileName?.match(/\.(txt|log|csv|md)$/i)) && (
+            <div className="p-3.5 border rounded-xl bg-primary/10 border-primary/30 flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2">
+                <FileText size={16} className="text-primary" />
+                <span className="font-bold text-foreground">Digital Plain Text Evidence</span>
+              </div>
+              <span className="text-[10px] text-muted">
+                Direct text stream parsed natively. Standard OCR bypassed.
+              </span>
+            </div>
+          )}
+
+          {/* Critical Threat Intelligence Alert Banner */}
+          {((ocrData.threats && ocrData.threats.length > 0) || ocrData.threatIntelligence?.has_threats || selectedFile?.anomalies?.some(a => a.type === 'VIOLENT_THREAT_DETECTED')) && (
+            <div className="p-4 border-2 border-rose-500/50 bg-rose-500/10 rounded-2xl space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] bg-rose-600 text-white font-black px-2 py-0.5 rounded uppercase flex items-center gap-1.5">
+                  <AlertTriangle size={12} />
+                  CRITICAL FORENSIC THREAT DETECTED
+                </span>
+                <span className="text-[10px] font-mono font-bold text-rose-500">Violent Intent / Contraband Identified</span>
+              </div>
+              <div className="space-y-2">
+                {ocrData.threats && ocrData.threats.length > 0 ? (
+                  ocrData.threats.map((threat, i) => (
+                    <div key={i} className="p-2.5 bg-background/80 rounded-lg border border-rose-500/30 text-xs">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-extrabold text-rose-600 text-[10px] uppercase">{threat.category} ({threat.tag})</span>
+                        <span className="text-[9px] bg-rose-600/20 text-rose-600 font-mono font-bold px-1.5 py-0.5 rounded">{threat.severity}</span>
+                      </div>
+                      <p className="font-mono text-foreground text-[11px] select-all leading-relaxed">{threat.context}</p>
+                    </div>
+                  ))
+                ) : (
+                  selectedFile?.anomalies?.filter(a => a.type === 'VIOLENT_THREAT_DETECTED' || a.type === 'CRIME_SCENE_MEDIA' || a.type === 'WEAPON_CONTRABAND_FLAG').map((anom, i) => (
+                    <div key={i} className="p-2.5 bg-background/80 rounded-lg border border-rose-500/30 text-xs">
+                      <span className="font-bold text-rose-600 text-[10px] uppercase block mb-0.5">{anom.type}</span>
+                      <p className="font-mono text-foreground text-[11px]">{anom.message}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
           
           {/* Dual Engine Metrics (PaddleOCR & EasyOCR) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -349,6 +419,27 @@ const EvidenceOCRPanel = ({ selectedFile, selectedCaseId, backendActive }) => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+
+              {/* Flagged Violent Threats & Contraband */}
+              {ocrData.threats && ocrData.threats.length > 0 && (
+                <div className="p-3.5 border-2 border-danger/40 bg-danger/10 rounded-xl space-y-2 md:col-span-2 lg:col-span-3 animate-fade-in">
+                  <span className="text-[10px] font-black text-danger uppercase tracking-wider flex items-center gap-1.5">
+                    <AlertTriangle size={13} className="text-danger" />
+                    Flagged Violent Threats & Contraband:
+                  </span>
+                  <div className="space-y-1.5">
+                    {ocrData.threats.map((threat, i) => (
+                      <div key={i} className="p-2 bg-background/80 rounded-lg border border-danger/30 text-xs flex flex-col gap-1">
+                        <div className="flex items-center justify-between">
+                          <span className="font-extrabold text-danger text-[10px] uppercase">{threat.category} ({threat.tag})</span>
+                          <span className="text-[9px] bg-danger text-white font-mono font-bold px-1.5 py-0.5 rounded">{threat.severity}</span>
+                        </div>
+                        <p className="font-mono text-foreground text-[11px] select-all">{threat.context}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               
               {/* Status / Transaction Outcome */}
               {ocrData.extractedData.status_signals && ocrData.extractedData.status_signals.length > 0 && (
@@ -682,6 +773,8 @@ const EvidenceViewer = () => {
   const extractedAmounts = fileExtractedData?.extracted_data?.amounts || [];
   const extractedPeople = fileExtractedData?.extracted_data?.people || [];
   const extractedIds = fileExtractedData?.extracted_data?.ids || [];
+  const extractedThreats = fileExtractedData?.extracted_data?.threats || [];
+  const mediaClassification = fileExtractedData?.extracted_data?.media_classification || null;
 
   // Mock Hex dump generator
   const getHexDump = (fileName) => {
@@ -911,6 +1004,39 @@ const EvidenceViewer = () => {
 
                   {/* Standard View Extracted Text Payload Section */}
                   <div className="space-y-4 animate-fade-in">
+
+                    {/* Critical Violent Threat Alert Box */}
+                    {((extractedThreats.length > 0) || selectedFile.anomalies?.some(a => a.type.includes('THREAT') || a.type.includes('CRIME') || a.type.includes('WEAPON'))) && (
+                      <div className="border-2 border-danger/40 bg-danger/10 p-4 rounded-xl space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] bg-danger text-white font-black px-2 py-0.5 rounded uppercase flex items-center gap-1.5">
+                            <AlertTriangle size={12} />
+                            CRITICAL FORENSIC THREAT IDENTIFIED
+                          </span>
+                          <span className="text-[10px] font-bold text-danger">Criminal Intent & Contraband Analyzer</span>
+                        </div>
+                        {extractedThreats.length > 0 ? (
+                          <div className="space-y-1.5 mt-2">
+                            {extractedThreats.map((threat, idx) => (
+                              <div key={idx} className="p-2 bg-background/80 rounded border border-danger/20 text-xs">
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="font-bold text-danger text-[10px] uppercase">{threat.category} ({threat.tag})</span>
+                                  <span className="text-[9px] bg-danger/20 text-danger font-mono font-bold px-1.5 py-0.5 rounded">{threat.severity}</span>
+                                </div>
+                                <p className="font-mono text-foreground text-[11px] select-all leading-relaxed">{threat.context}</p>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          selectedFile.anomalies?.filter(a => a.type.includes('THREAT') || a.type.includes('CRIME') || a.type.includes('WEAPON')).map((anom, idx) => (
+                            <div key={idx} className="p-2 bg-background/80 rounded border border-danger/20 text-xs">
+                              <span className="font-bold text-danger text-[10px] uppercase block mb-1">{anom.type}</span>
+                              <p className="font-mono text-foreground text-[11px]">{anom.message}</p>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
                     {selectedFile.exif ? (
                       <div className="border rounded-xl p-4 bg-card/30 space-y-3">
                         <h4 className="text-xs font-bold text-foreground flex items-center gap-1">
@@ -947,16 +1073,36 @@ const EvidenceViewer = () => {
                         </pre>
                       ) : (
                         <div className="p-4 bg-background/40 border border-border/20 rounded-lg text-center space-y-2">
-                          <p className="text-xs text-muted font-sans">
-                            No OCR extraction record found for this evidence file yet.
-                          </p>
-                          <button
-                            onClick={() => setViewMode('OCR')}
-                            className="bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 px-3 py-1.5 rounded-lg text-xs font-bold font-sans transition-all inline-flex items-center gap-1"
-                          >
-                            <Search size={12} />
-                            Open OCR Scanner to Analyze
-                          </button>
+                          {selectedFile.anomalies?.some(a => a.type === 'CRIME_SCENE_MEDIA') ? (
+                            <>
+                              <AlertTriangle size={24} className="text-danger mx-auto" />
+                              <h5 className="text-xs font-bold text-danger">Physical Crime Scene Media (Non-Document Evidence)</h5>
+                              <p className="text-xs text-muted font-sans max-w-md mx-auto">
+                                This photograph is flagged as physical crime scene evidence (e.g. suspected shooting/weapon/violent act). OCR is only applicable to text documents and receipts, not physical scene photographs.
+                              </p>
+                            </>
+                          ) : selectedFile.fileName?.match(/\.(txt|log|csv|md)$/i) ? (
+                            <>
+                              <FileText size={24} className="text-primary mx-auto" />
+                              <h5 className="text-xs font-bold text-foreground">Plain Text Evidence Document</h5>
+                              <p className="text-xs text-muted font-sans max-w-md mx-auto">
+                                Digital plain text file parsed directly. Standard OCR is bypassed for native digital text.
+                              </p>
+                            </>
+                          ) : (
+                            <>
+                              <p className="text-xs text-muted font-sans">
+                                Visual Photographic Evidence: No typographical text detected. Optical Character Recognition (OCR) applies only to text-bearing screenshots and scanned documents.
+                              </p>
+                              <button
+                                onClick={() => setViewMode('OCR')}
+                                className="bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 px-3 py-1.5 rounded-lg text-xs font-bold font-sans transition-all inline-flex items-center gap-1"
+                              >
+                                <Search size={12} />
+                                Open OCR Scanner to Inspect
+                              </button>
+                            </>
+                          )}
                         </div>
                       )}
                     </div>

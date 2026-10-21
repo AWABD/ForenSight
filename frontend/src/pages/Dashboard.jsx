@@ -47,6 +47,7 @@ const Dashboard = ({ setCurrentTab }) => {
 
   // Dynamic Threat Type calculation from active case evidence anomalies
   const computeThreatDistribution = () => {
+    let violentThreatCount = 0;
     let metadataCount = 0;
     let deepfakeCount = 0;
     let accessViolationCount = 0;
@@ -58,7 +59,9 @@ const Dashboard = ({ setCurrentTab }) => {
           const type = (anomaly.type || '').toUpperCase();
           const msg = (anomaly.message || '').toLowerCase();
           
-          if (type.includes('METADATA') || type.includes('EXIF') || msg.includes('timestamp') || msg.includes('exif')) {
+          if (type.includes('VIOLENT') || type.includes('THREAT') || type.includes('CRIME') || type.includes('HOMICIDE') || type.includes('WEAPON') || type.includes('EXTORTION') || msg.includes('kill') || msg.includes('shooting') || msg.includes('threat')) {
+            violentThreatCount += 1;
+          } else if (type.includes('METADATA') || type.includes('EXIF') || msg.includes('timestamp') || msg.includes('exif')) {
             metadataCount += 1;
           } else if (type.includes('DEEPFAKE') || type.includes('FORGERY') || type.includes('IMAGE') || type.includes('AUDIO') || msg.includes('synthetic')) {
             deepfakeCount += 1;
@@ -71,18 +74,22 @@ const Dashboard = ({ setCurrentTab }) => {
       }
     });
 
-    const totalAnomalies = metadataCount + deepfakeCount + accessViolationCount + systemAnomaliesCount;
+    const totalAnomalies = violentThreatCount + metadataCount + deepfakeCount + accessViolationCount + systemAnomaliesCount;
 
     if (totalAnomalies === 0) {
       // Baseline threat distribution ratio
       return [
-        { name: 'Metadata Spoofing', value: 40, percentage: '40%', color: '#3b82f6' },
-        { name: 'Deepfake Media', value: 35, percentage: '35%', color: '#ef4444' },
-        { name: 'Access Violation Logs', value: 25, percentage: '25%', color: '#f59e0b' }
+        { name: 'Violent Threats & Physical Crime', value: 30, percentage: '30%', color: '#e11d48' },
+        { name: 'Metadata Spoofing', value: 35, percentage: '35%', color: '#3b82f6' },
+        { name: 'Deepfake Media', value: 35, percentage: '35%', color: '#ef4444' }
       ];
     }
 
     const res = [];
+    if (violentThreatCount > 0) {
+      const pct = Math.round((violentThreatCount / totalAnomalies) * 100);
+      res.push({ name: 'Violent Threats & Physical Crime', value: violentThreatCount, percentage: `${pct}%`, color: '#e11d48' });
+    }
     if (metadataCount > 0) {
       const pct = Math.round((metadataCount / totalAnomalies) * 100);
       res.push({ name: 'Metadata Spoofing', value: metadataCount, percentage: `${pct}%`, color: '#3b82f6' });

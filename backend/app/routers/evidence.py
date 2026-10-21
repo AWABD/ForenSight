@@ -112,6 +112,23 @@ def upload_evidence(
             confidence_score=ocr_result["confidence_score"]
         )
         db.add(db_ocr)
+
+        # Synchronize any threats identified in extracted text with evidence anomalies
+        threat_data = ocr_result.get("extracted_data", {}).get("threat_intelligence", {})
+        threat_anomalies = threat_data.get("anomalies", [])
+        if threat_anomalies:
+            current_anomalies = list(new_evidence.anomalies or [])
+            existing_types = {a["type"] for a in current_anomalies}
+            updated = False
+            for tanom in threat_anomalies:
+                if tanom["type"] not in existing_types:
+                    current_anomalies.append(tanom)
+                    existing_types.add(tanom["type"])
+                    updated = True
+            if updated:
+                new_evidence.anomalies = current_anomalies
+                db.commit()
+                db.refresh(new_evidence)
     except Exception as ocr_err:
         logger.warning(f"Auto-OCR background extraction deferred for '{sanitized_filename}': {ocr_err}")
 
@@ -125,6 +142,21 @@ def upload_evidence(
         severity="INFO"
     )
     db.add(new_timeline_event)
+
+    # If critical/violent threat detected, record high-priority Timeline alert
+    has_critical_threat = any(a.get("severity") == "CRITICAL" for a in (new_evidence.anomalies or []))
+    if has_critical_threat:
+        crit_msg = next((a["message"] for a in new_evidence.anomalies if a.get("severity") == "CRITICAL"), "Violent threat detected")
+        threat_timeline_event = TimelineEvent(
+            case_id=resolved_case_id,
+            evidence_file_id=new_evidence.id,
+            timestamp_source="Forensic Threat Analyzer",
+            event_type="THREAT_ALERT",
+            description=f"CRITICAL Threat Flagged in {sanitized_filename}: {crit_msg}",
+            severity="CRITICAL"
+        )
+        db.add(threat_timeline_event)
+
     db.commit()
 
     # Append transaction block to cryptographic Chain of Custody ledger
@@ -207,6 +239,21 @@ def run_ocr_on_evidence(
         confidence_score=ocr_result["confidence_score"]
     )
     db.add(db_ocr)
+
+    # Synchronize any threats identified in extracted text with evidence anomalies
+    threat_data = ocr_result.get("extracted_data", {}).get("threat_intelligence", {})
+    threat_anomalies = threat_data.get("anomalies", [])
+    if threat_anomalies:
+        current_anomalies = list(evidence.anomalies or [])
+        existing_types = {a["type"] for a in current_anomalies}
+        updated = False
+        for tanom in threat_anomalies:
+            if tanom["type"] not in existing_types:
+                current_anomalies.append(tanom)
+                existing_types.add(tanom["type"])
+                updated = True
+        if updated:
+            evidence.anomalies = current_anomalies
     
     # Record timeline action
     new_timeline_event = TimelineEvent(

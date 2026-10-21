@@ -517,6 +517,27 @@ class OCRService:
 
         combined_search_text = (extracted_text + "\n" + raw_paddle_text + "\n" + raw_easy_text).strip()
         entities = OCRService._extract_entities(combined_search_text, all_unique_lines)
+
+        # Run Forensic Threat & Intent Intelligence Analyzer
+        from app.services.threat_service import ThreatService
+        threat_analysis = ThreatService.analyze_text_content(combined_search_text, file_name)
+        media_class_info = ThreatService.classify_media_type(
+            file_name=file_name,
+            ext=ext,
+            extracted_text=extracted_text,
+            ocr_lines_count=len(paddle_data.get("lines", [])) + len(easy_data.get("lines", []))
+        )
+
+        # If it's a visual scene photo or crime scene photo with no typography:
+        if is_image and not chosen_lines:
+            if media_class_info["media_class"] == "CRIME_SCENE_MEDIA":
+                extracted_text = "Visual Physical Crime Scene Media: Suspected shooting / weapon / physical assault evidence. No typography detected — Optical Character Recognition (OCR) is bypassed for physical scene media."
+            else:
+                extracted_text = "Visual Scene Photograph (Non-Document): No typographical text detected in image. Optical Character Recognition (OCR) is designed for documents, receipts, and text screenshots, not physical scene photographs."
+
+        entities["threat_intelligence"] = threat_analysis
+        entities["media_classification"] = media_class_info
+        entities["threats"] = threat_analysis["flagged_excerpts"]
         entities["uncertain_extractions"] = uncertain_extractions
         entities["file_sha256"] = file_sha256
 

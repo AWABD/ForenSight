@@ -188,6 +188,29 @@ class FileService:
 
         # Mock Anomalies detection matching frontend templates
         file_name_lower = clean_name.lower()
+
+        # 1. Physical Crime Scene & Suspected Violent Media (e.g., someone shooting another, weapon, homicide)
+        if any(kw in file_name_lower for kw in ['shoot', 'shooting', 'shot', 'gunshot', 'homicide', 'murder', 'crime_scene', 'weapon', 'assault', 'victim', 'dead_body']):
+            metadata["anomalies"].append({
+                "type": "CRIME_SCENE_MEDIA",
+                "severity": "CRITICAL" if any(k in file_name_lower for k in ('shoot', 'shooting', 'homicide', 'murder', 'gunshot')) else "HIGH",
+                "message": "Physical crime scene / violent media detected (suspected shooting/weapon/violent act). Optical Character Recognition bypassed for physical evidence review."
+            })
+
+        # 2. Plain Text Threat Intelligence & Violent Intent Inspection (.txt, .log, .md, etc.)
+        if extension in ('.txt', '.log', '.csv', '.json', '.md', '.sql', '.eml', '.msg'):
+            try:
+                if os.path.exists(file_path):
+                    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                        content_sample = f.read(131072) # Inspect up to 128KB text
+                    from app.services.threat_service import ThreatService
+                    threat_res = ThreatService.analyze_text_content(content_sample, clean_name)
+                    for anom in threat_res["anomalies"]:
+                        if not any(a["type"] == anom["type"] for a in metadata["anomalies"]):
+                            metadata["anomalies"].append(anom)
+            except Exception as threat_err:
+                logger.warning(f"Forensic threat inspection deferred for '{clean_name}': {threat_err}")
+
         if "tamper" in file_name_lower:
             metadata["anomalies"].append({
                 "type": "METADATA_TAMPERING",
