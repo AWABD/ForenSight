@@ -25,6 +25,15 @@ class OCRExtractedData(BaseModel):
     tables: List[Any] = []
     uncertain_extractions: List[Dict[str, Any]] = []
     file_sha256: Optional[str] = None
+    threats: List[Dict[str, Any]] = []
+    threat_intelligence: Optional[Dict[str, Any]] = None
+    media_classification: Optional[Dict[str, Any]] = None
+    engine_comparison: Optional[Dict[str, Any]] = None
+    cross_engine_agreement: Optional[float] = None
+    raw_paddle_text: Optional[str] = None
+    raw_easy_text: Optional[str] = None
+
+    model_config = ConfigDict(extra="allow")
 
 class OCRTextOut(BaseModel):
     id: str

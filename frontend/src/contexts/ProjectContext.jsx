@@ -293,6 +293,8 @@ const initialLogs = [
 export const ProjectProvider = ({ children }) => {
   const [cases, setCases] = useState(initialCases);
   const [selectedCaseId, setSelectedCaseId] = useState(SEED_CASE_UUIDS.c1);
+  const [focusedEvidenceId, setFocusedEvidenceId] = useState(null);
+  const [preferredViewerTab, setPreferredViewerTab] = useState('STANDARD');
   const [evidence, setEvidence] = useState(initialEvidence);
   const [timeline, setTimeline] = useState(initialTimeline);
   const [auditLogs, setAuditLogs] = useState(initialLogs);
@@ -521,30 +523,34 @@ export const ProjectProvider = ({ children }) => {
                     (caseId === 'c1' ? cases[0] : null);
     const targetUUID = matched?.id || (SEED_CASE_UUIDS[caseId] || caseId);
 
-    if (backendActive) {
-      try {
-        const formData = new FormData();
-        formData.append('file', file);
+    if (backendActive || token) {
+      const formData = new FormData();
+      formData.append('file', file);
 
-        const response = await fetch(`${API_BASE_URL}/cases/${targetUUID}/evidence/upload`, {
+      let response;
+      try {
+        response = await fetch(`${API_BASE_URL}/cases/${targetUUID}/evidence/upload`, {
           method: 'POST',
           headers: authHeader,
           body: formData
         });
+      } catch (netErr) {
+        console.error("Failed to reach ForenSight backend during upload:", netErr);
+        throw new Error("Could not connect to ForenSight backend server. Check that the API server is running before ingesting evidence.");
+      }
 
-        if (response.ok) {
-          await refreshData();
-          return;
-        } else {
-          const errData = await response.json().catch(() => ({}));
-          alert(`Ingest Blocked: ${errData.detail || 'Upload Failed'}`);
-        }
-      } catch (err) {
-        console.error("Failed to upload evidence to server:", err);
+      if (response.ok) {
+        const createdEvidence = await response.json();
+        setBackendActive(true);
+        await refreshData();
+        return createdEvidence;
+      } else {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.detail || `Evidence ingestion blocked (HTTP ${response.status}).`);
       }
     }
 
-    // Fallback to local mock state if backend is offline
+    // Offline demo fallback (only reached if no operator session token exists)
     const fileId = `e_${Date.now()}`;
     const newFile = {
       id: fileId,
@@ -596,6 +602,20 @@ export const ProjectProvider = ({ children }) => {
     setTimeline(updatedTimeline);
 
     appendAuditLog(`Ingested file ${file.name} into case vault. SHA256: ${newFile.sha256.substring(0, 12)}...`);
+    return {
+      id: fileId,
+      case_id: targetUUID,
+      file_name: newFile.fileName,
+      file_size_bytes: newFile.fileSize,
+      file_type: newFile.fileType,
+      sha256_hash: newFile.sha256,
+      sha3_hash: newFile.sha3,
+      storage_vault_key: `offline/${targetUUID}/${newFile.fileName}`,
+      ingested_at: newFile.ingestedAt,
+      anomalies: newFile.anomalies,
+      exif: null,
+      offlineDemo: true
+    };
   };
 
   const deleteEvidenceFile = async (caseId, evidenceId) => {
@@ -654,11 +674,21 @@ export const ProjectProvider = ({ children }) => {
     setAuditLogs(prev => [...prev, logEntry]);
   };
 
+  const openEvidenceInViewer = (evidenceId, tab = 'OCR') => {
+    setFocusedEvidenceId(evidenceId);
+    setPreferredViewerTab(tab);
+  };
+
   return (
     <ProjectContext.Provider value={{
       cases,
       selectedCaseId,
       setSelectedCaseId,
+      focusedEvidenceId,
+      setFocusedEvidenceId,
+      preferredViewerTab,
+      setPreferredViewerTab,
+      openEvidenceInViewer,
       activeCase,
       evidence,
       timeline,

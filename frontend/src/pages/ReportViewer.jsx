@@ -52,7 +52,7 @@ const ReportViewer = () => {
 
       fetchAllOCR();
     }
-  }, [selectedCaseId, caseEvidence, backendActive]);
+  }, [selectedCaseId, activeCase?.id, caseEvidence, backendActive]);
 
   // Auto-generate dynamic examiner opinion based on actual case & extracted evidence
   useEffect(() => {
@@ -341,7 +341,7 @@ const ReportViewer = () => {
                     const statusSignals = data.status_signals || [];
                     const uncertain = data.uncertain_extractions || [];
                     const tables = data.tables || [];
-                    const fileSha256 = data.file_sha256 || file.hash || '';
+                    const fileSha256 = data.file_sha256 || file.sha256 || '';
                     const confidence = typeof ocrRec?.confidence_score === 'number' ? ocrRec.confidence_score : null;
 
                     return (

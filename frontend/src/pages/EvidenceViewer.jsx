@@ -5,14 +5,98 @@ import {
   HardDrive, AlertTriangle, Eye, Binary, Search, FileText, 
   ShieldCheck, Loader2, Play, Check, Copy, Calendar, BarChart3, Database,
   Trash2, Lock, Clock, DollarSign, UserCheck, Key, AtSign, Building2,
-  CheckCircle2, AlertCircle, RefreshCw, Layers, Shield
+  CheckCircle2, AlertCircle, RefreshCw, Layers, Shield, ArrowRight
 } from 'lucide-react';
 
 const isUUID = (str) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str || '');
 const isValidCaseIdentifier = (str) => typeof str === 'string' && (isUUID(str) || /^c\d+$/i.test(str.trim()) || /^FS-\d{4}-\d+$/i.test(str.trim()));
 
+const isImageEvidence = (file) => {
+  if (!file) return false;
+  const ft = (file.fileType || '').toLowerCase();
+  const fn = (file.fileName || '').toLowerCase();
+  return ft.startsWith('image/') || ft.includes('image') || /\.(jpg|jpeg|png|bmp|webp|tiff|gif)$/i.test(fn);
+};
+
+const isTextEvidence = (file) => {
+  if (!file) return false;
+  const ft = (file.fileType || '').toLowerCase();
+  const fn = (file.fileName || '').toLowerCase();
+  return ft.startsWith('text/') || ft.includes('log') || ft.includes('json') || ft.includes('csv') || /\.(txt|log|csv|json|sql|xml|html|md|eml|msg)$/i.test(fn);
+};
+
+const getEngineBadgeStyle = (status) => {
+  switch (status) {
+    case 'SUCCESS':
+      return 'bg-success/15 text-success';
+    case 'DEFERRED':
+      return 'bg-primary/15 text-primary';
+    case 'NOT_AVAILABLE':
+    case 'NOT_CONFIGURED':
+    case 'LEGACY_RECORD':
+      return 'bg-amber-500/15 text-amber-500';
+    default:
+      return 'bg-danger/15 text-danger';
+  }
+};
+
+// Format saved OCR DB record into unified UI state
+const normalizeSavedOcrRecord = (lastRecord, fallbackSha256 = '') => {
+  const extData = lastRecord.extracted_data || {};
+  const hasStoredComparison = Boolean(extData.engine_comparison);
+
+  const comparison = extData.engine_comparison || {
+    paddleocr: {
+      engine_name: "PaddleOCR / Primary Engine",
+      status: lastRecord.extracted_text ? "SUCCESS" : "LEGACY_RECORD",
+      inference_time_seconds: null,
+      confidence_score: typeof lastRecord.confidence_score === 'number'
+        ? Number(lastRecord.confidence_score.toFixed(2))
+        : null,
+      detected_blocks_count: Array.isArray(lastRecord.bounding_boxes) ? lastRecord.bounding_boxes.length : 0
+    },
+    easyocr: {
+      engine_name: "EasyOCR (Secondary / Verification)",
+      status: hasStoredComparison ? "NOT_AVAILABLE" : "LEGACY_RECORD",
+      inference_time_seconds: null,
+      confidence_score: null,
+      detected_blocks_count: 0,
+      error_message: "Run Forensic OCR Scanner to capture full dual-engine telemetry."
+    }
+  };
+
+  return {
+    extractedText: lastRecord.extracted_text || '',
+    mediaClassification: extData.media_classification || null,
+    threatIntelligence: extData.threat_intelligence || null,
+    threats: extData.threats || [],
+    extractedData: {
+      dates: extData.dates || [],
+      times: extData.times || [],
+      amounts: extData.amounts || [],
+      people: extData.people || [],
+      ids: extData.ids || [],
+      upi_ids: extData.upi_ids || [],
+      emails: extData.emails || [],
+      urls: extData.urls || [],
+      banking_details: extData.banking_details || [],
+      status_signals: extData.status_signals || [],
+      numbers: extData.numbers || [],
+      tables: extData.tables || [],
+      threats: extData.threats || [],
+      uncertain_extractions: extData.uncertain_extractions || []
+    },
+    comparison,
+    crossAgreement: extData.cross_engine_agreement ?? null,
+    fileSha256: extData.file_sha256 || fallbackSha256 || '',
+    rawPaddleText: extData.raw_paddle_text || lastRecord.extracted_text || '',
+    rawEasyText: extData.raw_easy_text || ''
+  };
+};
+
 // Sub-component for the OCR Examiner & Comparison Module
-const EvidenceOCRPanel = ({ selectedFile, selectedCaseId, backendActive }) => {
+const EvidenceOCRPanel = ({ selectedFile, selectedCaseId, backendActive, onOcrComplete }) => {
+  const [loadingSaved, setLoadingSaved] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState('');
   const [scanError, setScanError] = useState(null);
@@ -20,70 +104,44 @@ const EvidenceOCRPanel = ({ selectedFile, selectedCaseId, backendActive }) => {
   const [ocrData, setOcrData] = useState(null);
   const [activeStreamTab, setActiveStreamTab] = useState('PRIMARY'); // PRIMARY | PADDLE | EASY
 
+  const selectedFileId = selectedFile?.id;
+  const selectedFileSha256 = selectedFile?.sha256;
+
   // Fetch existing OCR scan results from server when selected file changes
   useEffect(() => {
+    let cancelled = false;
     setOcrData(null);
     setScanError(null);
-    if (backendActive && isValidCaseIdentifier(selectedCaseId) && isUUID(selectedFile?.id)) {
+    setActiveStreamTab('PRIMARY');
+
+    if (backendActive && isValidCaseIdentifier(selectedCaseId) && isUUID(selectedFileId)) {
+      setLoadingSaved(true);
       const token = localStorage.getItem('token');
       const authHeader = token ? { 'Authorization': `Bearer ${token}` } : {};
       
-      fetch(`${API_BASE_URL}/cases/${selectedCaseId}/evidence/${selectedFile.id}/ocr`, { headers: authHeader })
+      fetch(`${API_BASE_URL}/cases/${selectedCaseId}/evidence/${selectedFileId}/ocr`, { headers: authHeader })
         .then(res => res.ok ? res.json() : null)
         .then(data => {
+          if (cancelled) return;
+          setLoadingSaved(false);
           if (data && Array.isArray(data) && data.length > 0) {
             const lastRecord = data[data.length - 1];
-            const extData = lastRecord.extracted_data || {};
-            
-            setOcrData({
-              extractedText: lastRecord.extracted_text || '',
-              mediaClassification: extData.media_classification || null,
-              threatIntelligence: extData.threat_intelligence || null,
-              threats: extData.threats || [],
-              extractedData: {
-                dates: extData.dates || [],
-                times: extData.times || [],
-                amounts: extData.amounts || [],
-                people: extData.people || [],
-                ids: extData.ids || [],
-                upi_ids: extData.upi_ids || [],
-                emails: extData.emails || [],
-                urls: extData.urls || [],
-                banking_details: extData.banking_details || [],
-                status_signals: extData.status_signals || [],
-                numbers: extData.numbers || [],
-                tables: extData.tables || [],
-                threats: extData.threats || [],
-                uncertain_extractions: extData.uncertain_extractions || []
-              },
-              comparison: extData.engine_comparison || {
-                paddleocr: {
-                  engine_name: "PaddleOCR (Primary Engine)",
-                  status: "SUCCESS",
-                  inference_time_seconds: 0.0,
-                  confidence_score: Number((lastRecord.confidence_score || 0).toFixed(2)),
-                  detected_blocks_count: 0
-                },
-                easyocr: {
-                  engine_name: "EasyOCR (Secondary / Verification)",
-                  status: "SUCCESS",
-                  inference_time_seconds: 0.0,
-                  confidence_score: 0.0,
-                  detected_blocks_count: 0
-                }
-              },
-              crossAgreement: extData.cross_engine_agreement ?? null,
-              fileSha256: extData.file_sha256 || selectedFile?.sha256 || '',
-              rawPaddleText: extData.raw_paddle_text || lastRecord.extracted_text || '',
-              rawEasyText: extData.raw_easy_text || ''
-            });
+            setOcrData(normalizeSavedOcrRecord(lastRecord, selectedFileSha256));
           }
         })
         .catch((err) => {
+          if (cancelled) return;
+          setLoadingSaved(false);
           console.warn("Failed to fetch saved OCR record:", err);
         });
+    } else {
+      setLoadingSaved(false);
     }
-  }, [selectedFile?.id, selectedCaseId, backendActive]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedFileId, selectedFileSha256, selectedCaseId, backendActive]);
 
   const runOCRScan = async () => {
     setScanning(true);
@@ -92,16 +150,16 @@ const EvidenceOCRPanel = ({ selectedFile, selectedCaseId, backendActive }) => {
 
     const steps = [
       { t: 400, log: 'Loading evidence container & checking SHA-256 cryptographic signature...' },
-      { t: 1200, log: 'Running PaddleOCR (Primary Engine) text detection & recognition...' },
+      { t: 1200, log: 'Running Primary OCR (PaddleOCR / RapidOCR ONNX) text detection & recognition...' },
       { t: 3000, log: 'Running EasyOCR (Secondary Engine) verification scan...' },
       { t: 5000, log: 'Cross-referencing engine outputs & extracting structured entities...' }
     ];
 
-    steps.forEach((step) => {
+    const timers = steps.map((step) =>
       setTimeout(() => {
         setScanProgress(step.log);
-      }, step.t);
-    });
+      }, step.t)
+    );
 
     const token = localStorage.getItem('token');
     const authHeader = token ? { 'Authorization': `Bearer ${token}` } : {};
@@ -116,12 +174,14 @@ const EvidenceOCRPanel = ({ selectedFile, selectedCaseId, backendActive }) => {
           }
         });
 
+        timers.forEach(clearTimeout);
+
         if (response.ok) {
           const resData = await response.json();
           setScanning(false);
           
           const extData = resData.extracted_data || {};
-          setOcrData({
+          const nextData = {
             extractedText: resData.record?.extracted_text || resData.extracted_text || "No text detected",
             mediaClassification: extData.media_classification || null,
             threatIntelligence: extData.threat_intelligence || null,
@@ -147,16 +207,22 @@ const EvidenceOCRPanel = ({ selectedFile, selectedCaseId, backendActive }) => {
             fileSha256: resData.file_sha256 || resData.record?.extracted_data?.file_sha256 || selectedFile?.sha256,
             rawPaddleText: resData.raw_paddle_text || "",
             rawEasyText: resData.raw_easy_text || ""
-          });
+          };
+          setOcrData(nextData);
+          if (onOcrComplete && resData.record) {
+            onOcrComplete(resData.record);
+          }
           return;
         } else {
           const errBody = await response.json().catch(() => ({}));
           throw new Error(errBody.detail || `Server returned HTTP ${response.status}`);
         }
       } else {
-        throw new Error("Invalid Case or Evidence identifier for live OCR processing.");
+        timers.forEach(clearTimeout);
+        throw new Error("Live backend authentication is required to execute real server OCR.");
       }
     } catch (err) {
+      timers.forEach(clearTimeout);
       console.error("OCR execution failure:", err);
       setScanning(false);
       setScanError(err.message || "Failed to execute OCR scan on evidence file.");
@@ -172,22 +238,35 @@ const EvidenceOCRPanel = ({ selectedFile, selectedCaseId, backendActive }) => {
 
   const getDisplayedStreamText = () => {
     if (!ocrData) return '';
-    if (activeStreamTab === 'PADDLE') return ocrData.rawPaddleText || 'No text detected by PaddleOCR.';
+    if (activeStreamTab === 'PADDLE') return ocrData.rawPaddleText || 'No text detected by Primary Engine.';
     if (activeStreamTab === 'EASY') return ocrData.rawEasyText || 'No text detected by EasyOCR.';
     return ocrData.extractedText || 'No text detected.';
   };
 
+  const displayedText = getDisplayedStreamText();
+  const displayedLineCount = displayedText ? displayedText.split(/\r?\n/).filter(l => l.trim()).length : 0;
+  const paddleStatus = ocrData?.comparison?.paddleocr?.status || 'READY';
+  const easyStatus = ocrData?.comparison?.easyocr?.status || 'READY';
+
   return (
     <div className="space-y-6">
+
+      {/* Loading saved record */}
+      {loadingSaved && !scanning && !ocrData && (
+        <div className="border border-dashed p-10 rounded-2xl flex flex-col items-center justify-center text-center space-y-3 bg-card/20">
+          <Loader2 className="w-8 h-8 text-primary animate-spin" />
+          <p className="text-xs font-mono text-muted">Checking database for saved OCR extraction results...</p>
+        </div>
+      )}
       
       {/* Run Scan Banner */}
-      {!ocrData && !scanning && (
+      {!loadingSaved && !ocrData && !scanning && (
         <div className="border border-dashed p-10 rounded-2xl flex flex-col items-center justify-center text-center space-y-4 bg-card/20">
           <Search className="w-12 h-12 text-primary animate-pulse" />
           <div className="space-y-1">
             <h4 className="text-sm font-bold text-foreground">Multi-Engine OCR Processing Pending</h4>
             <p className="text-[10px] text-muted max-w-md">
-              Run genuine character recognition across dual engines (PaddleOCR & EasyOCR) to isolate text, numbers, dates, amounts, people, and transaction identifiers without synthetic data.
+              Run genuine character recognition across dual engines (PaddleOCR / RapidOCR &amp; EasyOCR) to isolate text, numbers, dates, amounts, people, and transaction identifiers without synthetic data.
             </p>
           </div>
           {scanError && (
@@ -221,8 +300,57 @@ const EvidenceOCRPanel = ({ selectedFile, selectedCaseId, backendActive }) => {
       )}
 
       {/* OCR scan results */}
-      {ocrData && (
+      {ocrData && !scanning && (
         <div className="space-y-6 animate-fade-in">
+
+          {scanError && (
+            <div className="p-3 bg-danger/10 border border-danger/30 rounded-xl text-danger text-xs font-mono flex items-center gap-2">
+              <AlertCircle size={14} className="shrink-0" />
+              <span>{scanError}</span>
+            </div>
+          )}
+
+          {/* Engine Unavailable Warning Banner */}
+          {ocrData.mediaClassification?.media_class === 'OCR_ENGINE_UNAVAILABLE' && (
+            <div className="p-4 border-2 border-amber-500/40 bg-amber-500/10 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="space-y-1">
+                <span className="text-[10px] bg-amber-500 text-slate-950 font-black px-2 py-0.5 rounded uppercase">
+                  OCR ENGINE EXECUTION INCOMPLETE
+                </span>
+                <p className="text-xs text-foreground/90 leading-relaxed pt-1">
+                  {ocrData.mediaClassification.ocr_explanation || ocrData.extractedText}
+                </p>
+              </div>
+              <button
+                onClick={runOCRScan}
+                className="shrink-0 bg-primary hover:bg-primary-dark text-white rounded-lg px-4 py-2 text-xs font-bold flex items-center gap-1.5"
+              >
+                <RefreshCw size={12} />
+                Retry OCR Scan
+              </button>
+            </div>
+          )}
+
+          {/* Quick-Ingest Verification Prompt Banner */}
+          {easyStatus === 'DEFERRED' && (
+            <div className="p-3.5 border rounded-xl bg-primary/10 border-primary/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+              <div className="space-y-0.5">
+                <span className="font-bold text-primary uppercase text-[10px] tracking-wider block">
+                  Quick-Ingest Auto-OCR Completed (Engine 1)
+                </span>
+                <p className="text-[11px] text-muted">
+                  Initial text and entities were extracted automatically on upload. Run Dual-Engine Verification to execute EasyOCR cross-verification.
+                </p>
+              </div>
+              <button
+                onClick={runOCRScan}
+                className="shrink-0 bg-primary hover:bg-primary-dark text-white rounded-lg px-3.5 py-2 text-[11px] font-bold flex items-center gap-1.5 transition-all"
+              >
+                <RefreshCw size={12} />
+                Run Dual-Engine Verification
+              </button>
+            </div>
+          )}
 
           {/* Crime Scene Media Banner (Physical Evidence, Shooting, Weapons) */}
           {(ocrData.mediaClassification?.media_class === 'CRIME_SCENE_MEDIA' || selectedFile?.anomalies?.some(a => a.type === 'CRIME_SCENE_MEDIA')) && (
@@ -248,7 +376,7 @@ const EvidenceOCRPanel = ({ selectedFile, selectedCaseId, backendActive }) => {
                 <span className="font-bold text-foreground">Digital Plain Text Evidence</span>
               </div>
               <span className="text-[10px] text-muted">
-                Direct text stream parsed natively. Standard OCR bypassed.
+                Direct text stream parsed natively. Standard image OCR bypassed.
               </span>
             </div>
           )}
@@ -286,7 +414,7 @@ const EvidenceOCRPanel = ({ selectedFile, selectedCaseId, backendActive }) => {
             </div>
           )}
           
-          {/* Dual Engine Metrics (PaddleOCR & EasyOCR) */}
+          {/* Dual Engine Metrics (PaddleOCR / RapidOCR & EasyOCR) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             
             {/* PaddleOCR Card (Primary) */}
@@ -296,30 +424,34 @@ const EvidenceOCRPanel = ({ selectedFile, selectedCaseId, backendActive }) => {
                   <CheckCircle2 size={12} />
                   OCR Engine 1 (Primary)
                 </span>
-                <span className={`px-2 py-0.5 rounded-full font-mono font-bold text-[8px] ${
-                  ocrData.comparison?.paddleocr?.status === 'SUCCESS' ? 'bg-success/15 text-success' : 'bg-danger/15 text-danger'
-                }`}>
-                  {ocrData.comparison?.paddleocr?.status || 'READY'}
+                <span className={`px-2 py-0.5 rounded-full font-mono font-bold text-[8px] ${getEngineBadgeStyle(paddleStatus)}`}>
+                  {paddleStatus}
                 </span>
               </div>
               <h4 className="text-xs font-extrabold text-foreground">
                 {ocrData.comparison?.paddleocr?.engine_name || 'PaddleOCR (Primary Engine)'}
               </h4>
-              <div className="grid grid-cols-2 gap-3 mt-4 text-[10px] leading-relaxed">
+              <div className="grid grid-cols-3 gap-2 mt-4 text-[10px] leading-relaxed">
                 <div>
-                  <span className="text-muted block font-semibold mb-0.5 uppercase tracking-wider">Processing Time</span>
+                  <span className="text-muted block font-semibold mb-0.5 uppercase tracking-wider">Time</span>
                   <strong className="text-foreground text-xs font-mono">
-                    {ocrData.comparison?.paddleocr?.inference_time_seconds 
-                      ? `${ocrData.comparison.paddleocr.inference_time_seconds} s` 
+                    {typeof ocrData.comparison?.paddleocr?.inference_time_seconds === 'number'
+                      ? `${ocrData.comparison.paddleocr.inference_time_seconds} s`
                       : 'N/A'}
                   </strong>
                 </div>
                 <div>
-                  <span className="text-muted block font-semibold mb-0.5 uppercase tracking-wider">Mean Confidence</span>
+                  <span className="text-muted block font-semibold mb-0.5 uppercase tracking-wider">Confidence</span>
                   <strong className="text-foreground text-xs font-mono">
-                    {ocrData.comparison?.paddleocr?.confidence_score !== undefined 
-                      ? `${ocrData.comparison.paddleocr.confidence_score}%` 
+                    {paddleStatus === 'SUCCESS' && typeof ocrData.comparison?.paddleocr?.confidence_score === 'number'
+                      ? `${ocrData.comparison.paddleocr.confidence_score}%`
                       : 'N/A'}
+                  </strong>
+                </div>
+                <div>
+                  <span className="text-muted block font-semibold mb-0.5 uppercase tracking-wider">Blocks</span>
+                  <strong className="text-foreground text-xs font-mono">
+                    {ocrData.comparison?.paddleocr?.detected_blocks_count ?? 'N/A'}
                   </strong>
                 </div>
               </div>
@@ -337,35 +469,45 @@ const EvidenceOCRPanel = ({ selectedFile, selectedCaseId, backendActive }) => {
                   <Layers size={12} />
                   OCR Engine 2 (Secondary / Verification)
                 </span>
-                <span className={`px-2 py-0.5 rounded-full font-mono font-bold text-[8px] ${
-                  ocrData.comparison?.easyocr?.status === 'SUCCESS' ? 'bg-primary/15 text-primary' : 'bg-amber-500/15 text-amber-500'
-                }`}>
-                  {ocrData.comparison?.easyocr?.status || 'READY'}
+                <span className={`px-2 py-0.5 rounded-full font-mono font-bold text-[8px] ${getEngineBadgeStyle(easyStatus)}`}>
+                  {easyStatus}
                 </span>
               </div>
               <h4 className="text-xs font-extrabold text-foreground">
                 {ocrData.comparison?.easyocr?.engine_name || 'EasyOCR (Secondary / Verification)'}
               </h4>
-              <div className="grid grid-cols-2 gap-3 mt-4 text-[10px] leading-relaxed">
+              <div className="grid grid-cols-3 gap-2 mt-4 text-[10px] leading-relaxed">
                 <div>
-                  <span className="text-muted block font-semibold mb-0.5 uppercase tracking-wider">Processing Time</span>
+                  <span className="text-muted block font-semibold mb-0.5 uppercase tracking-wider">Time</span>
                   <strong className="text-foreground text-xs font-mono">
-                    {ocrData.comparison?.easyocr?.inference_time_seconds 
-                      ? `${ocrData.comparison.easyocr.inference_time_seconds} s` 
+                    {easyStatus === 'SUCCESS' && typeof ocrData.comparison?.easyocr?.inference_time_seconds === 'number'
+                      ? `${ocrData.comparison.easyocr.inference_time_seconds} s`
                       : 'N/A'}
                   </strong>
                 </div>
                 <div>
-                  <span className="text-muted block font-semibold mb-0.5 uppercase tracking-wider">Mean Confidence</span>
+                  <span className="text-muted block font-semibold mb-0.5 uppercase tracking-wider">Confidence</span>
                   <strong className="text-foreground text-xs font-mono">
-                    {ocrData.comparison?.easyocr?.confidence_score !== undefined 
-                      ? `${ocrData.comparison.easyocr.confidence_score}%` 
+                    {easyStatus === 'SUCCESS' && typeof ocrData.comparison?.easyocr?.confidence_score === 'number'
+                      ? `${ocrData.comparison.easyocr.confidence_score}%`
+                      : 'N/A'}
+                  </strong>
+                </div>
+                <div>
+                  <span className="text-muted block font-semibold mb-0.5 uppercase tracking-wider">Blocks</span>
+                  <strong className="text-foreground text-xs font-mono">
+                    {easyStatus === 'SUCCESS'
+                      ? (ocrData.comparison?.easyocr?.detected_blocks_count ?? 0)
                       : 'N/A'}
                   </strong>
                 </div>
               </div>
               {ocrData.comparison?.easyocr?.error_message && (
-                <div className="mt-3 text-[9px] text-danger font-mono bg-danger/10 p-2 rounded border border-danger/20">
+                <div className={`mt-3 text-[9px] font-mono p-2 rounded border ${
+                  easyStatus === 'FAILED'
+                    ? 'text-danger bg-danger/10 border-danger/20'
+                    : 'text-muted bg-background/40 border-border/30'
+                }`}>
                   {ocrData.comparison.easyocr.error_message}
                 </div>
               )}
@@ -384,27 +526,76 @@ const EvidenceOCRPanel = ({ selectedFile, selectedCaseId, backendActive }) => {
                 </span>
               </div>
               <span className="text-[10px] text-muted">
-                Calculated via token overlap between PaddleOCR and EasyOCR outputs.
+                Calculated via token overlap between Primary OCR and EasyOCR outputs.
               </span>
             </div>
           )}
 
-          {/* File Integrity Verification Box */}
-          <div className="p-4 border rounded-2xl bg-card/25 space-y-2 border-border/40">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold text-muted uppercase tracking-wider flex items-center gap-1.5">
-                <Shield size={12} className="text-primary" />
-                File Integrity & Cryptographic Seal (ISO/IEC 27037)
-              </span>
-              <span className="text-[9px] bg-success/10 text-success border border-success/20 px-2 py-0.5 rounded font-mono font-bold">
-                Direct Byte Verification
-              </span>
+          {/* RAW EXTRACTED TEXT (Placed up front for immediate inspection) */}
+          <div className="border rounded-2xl glassmorphism p-5 space-y-3 border-primary/25">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b pb-3 border-border/20">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-xs uppercase font-extrabold tracking-wider text-primary flex items-center gap-1.5">
+                  <FileText size={14} />
+                  Raw Extracted Text ({displayedLineCount} lines)
+                </h3>
+                {/* Engine stream selector */}
+                <div className="flex gap-1 ml-1">
+                  <button
+                    onClick={() => setActiveStreamTab('PRIMARY')}
+                    className={`px-2 py-0.5 rounded text-[9px] font-bold font-mono transition-all ${
+                      activeStreamTab === 'PRIMARY' ? 'bg-primary text-white' : 'text-muted hover:bg-border/30'
+                    }`}
+                  >
+                    Primary Output
+                  </button>
+                  {ocrData.rawPaddleText && (
+                    <button
+                      onClick={() => setActiveStreamTab('PADDLE')}
+                      className={`px-2 py-0.5 rounded text-[9px] font-bold font-mono transition-all ${
+                        activeStreamTab === 'PADDLE' ? 'bg-primary text-white' : 'text-muted hover:bg-border/30'
+                      }`}
+                    >
+                      PaddleOCR Stream
+                    </button>
+                  )}
+                  {ocrData.rawEasyText && (
+                    <button
+                      onClick={() => setActiveStreamTab('EASY')}
+                      className={`px-2 py-0.5 rounded text-[9px] font-bold font-mono transition-all ${
+                        activeStreamTab === 'EASY' ? 'bg-primary text-white' : 'text-muted hover:bg-border/30'
+                      }`}
+                    >
+                      EasyOCR Stream
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <button 
+                onClick={() => copyText(displayedText)}
+                className="px-2.5 py-1 text-[9px] border rounded bg-background/50 hover:bg-background/80 text-muted transition-colors flex items-center gap-1 font-bold self-start sm:self-auto"
+              >
+                {copied ? <Check size={10} className="text-success" /> : <Copy size={10} />}
+                {copied ? 'Copied' : 'Copy Raw Text'}
+              </button>
             </div>
-            <div className="text-[10px] space-y-1">
-              <span className="text-muted block font-semibold">FILE SHA-256 HASH:</span>
-              <p className="font-mono text-foreground bg-background/50 p-2.5 rounded-lg border border-border/10 select-all break-all font-bold">
-                {ocrData.fileSha256 || selectedFile?.sha256 || "N/A"}
-              </p>
+
+            {/* Extracted text payload block */}
+            <pre className="text-[11px] leading-relaxed text-foreground bg-background/60 p-4 rounded-xl font-mono border border-border/20 select-all whitespace-pre-wrap break-words max-h-96 overflow-auto">
+              {displayedText}
+            </pre>
+
+            {/* Re-run action */}
+            <div className="pt-1 flex flex-wrap justify-between items-center gap-2 text-[10px] text-muted">
+              <span>Original evidence file preserved untouched in vault storage.</span>
+              <button 
+                onClick={runOCRScan}
+                className="text-primary hover:underline font-bold flex items-center gap-1"
+              >
+                <RefreshCw size={10} />
+                Re-run Full OCR Scan
+              </button>
             </div>
           </div>
 
@@ -425,7 +616,7 @@ const EvidenceOCRPanel = ({ selectedFile, selectedCaseId, backendActive }) => {
                 <div className="p-3.5 border-2 border-danger/40 bg-danger/10 rounded-xl space-y-2 md:col-span-2 lg:col-span-3 animate-fade-in">
                   <span className="text-[10px] font-black text-danger uppercase tracking-wider flex items-center gap-1.5">
                     <AlertTriangle size={13} className="text-danger" />
-                    Flagged Violent Threats & Contraband:
+                    Flagged Violent Threats &amp; Contraband:
                   </span>
                   <div className="space-y-1.5">
                     {ocrData.threats.map((threat, i) => (
@@ -531,7 +722,7 @@ const EvidenceOCRPanel = ({ selectedFile, selectedCaseId, backendActive }) => {
                 <div className="p-3 border rounded-xl bg-background/40 space-y-1.5 md:col-span-2">
                   <span className="text-[9px] font-bold text-muted uppercase block tracking-wider flex items-center gap-1">
                     <Key size={11} className="text-primary" />
-                    Transaction IDs & Reference UTRs:
+                    Transaction IDs &amp; Reference UTRs:
                   </span>
                   <div className="flex flex-col gap-1">
                     {ocrData.extractedData.ids.map((idVal, i) => (
@@ -554,6 +745,28 @@ const EvidenceOCRPanel = ({ selectedFile, selectedCaseId, backendActive }) => {
                     {ocrData.extractedData.upi_ids.map((upi, i) => (
                       <span key={i} className="px-2 py-0.5 rounded border border-accent/20 bg-accent/5 font-mono text-[10px] text-accent font-bold">
                         {upi}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Emails & URLs */}
+              {((ocrData.extractedData.emails?.length > 0) || (ocrData.extractedData.urls?.length > 0)) && (
+                <div className="p-3 border rounded-xl bg-background/40 space-y-1.5">
+                  <span className="text-[9px] font-bold text-muted uppercase block tracking-wider flex items-center gap-1">
+                    <AtSign size={11} className="text-primary" />
+                    Emails &amp; URLs:
+                  </span>
+                  <div className="flex flex-col gap-1">
+                    {(ocrData.extractedData.emails || []).map((em, i) => (
+                      <span key={`em-${i}`} className="px-2 py-0.5 rounded border bg-background/60 font-mono text-[10px] text-foreground break-all">
+                        {em}
+                      </span>
+                    ))}
+                    {(ocrData.extractedData.urls || []).map((u, i) => (
+                      <span key={`url-${i}`} className="px-2 py-0.5 rounded border bg-background/60 font-mono text-[10px] text-primary break-all">
+                        {u}
                       </span>
                     ))}
                   </div>
@@ -596,7 +809,20 @@ const EvidenceOCRPanel = ({ selectedFile, selectedCaseId, backendActive }) => {
 
             </div>
 
-            {/* Uncertain Extractions Warning Box (Requirement 11) */}
+            {(!ocrData.extractedData.amounts?.length &&
+              !ocrData.extractedData.people?.length &&
+              !ocrData.extractedData.dates?.length &&
+              !ocrData.extractedData.ids?.length &&
+              !ocrData.extractedData.upi_ids?.length &&
+              !ocrData.extractedData.banking_details?.length &&
+              !ocrData.extractedData.status_signals?.length &&
+              !ocrData.extractedData.numbers?.length) && (
+              <p className="text-[11px] text-muted italic">
+                No structured financial, date, person, or identifier entities matched patterns in the extracted text. Inspect the Raw Extracted Text block above for full content.
+              </p>
+            )}
+
+            {/* Uncertain Extractions Warning Box */}
             {ocrData.extractedData.uncertain_extractions && ocrData.extractedData.uncertain_extractions.length > 0 && (
               <div className="p-3 border rounded-xl border-amber-500/30 bg-amber-500/5 space-y-1.5 text-xs text-amber-500">
                 <span className="font-bold flex items-center gap-1.5 uppercase text-[9px] tracking-wider">
@@ -647,71 +873,22 @@ const EvidenceOCRPanel = ({ selectedFile, selectedCaseId, backendActive }) => {
 
           </div>
 
-          {/* RAW EXTRACTED TEXT (Requirement 16) */}
-          <div className="border rounded-2xl glassmorphism p-5 space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b pb-3 border-border/20">
-              <div className="flex items-center gap-2">
-                <h3 className="text-xs uppercase font-extrabold tracking-wider text-primary flex items-center gap-1.5">
-                  <FileText size={14} />
-                  Raw Extracted Text
-                </h3>
-                {/* Engine stream selector */}
-                <div className="flex gap-1 ml-2">
-                  <button
-                    onClick={() => setActiveStreamTab('PRIMARY')}
-                    className={`px-2 py-0.5 rounded text-[9px] font-bold font-mono transition-all ${
-                      activeStreamTab === 'PRIMARY' ? 'bg-primary text-white' : 'text-muted hover:bg-border/30'
-                    }`}
-                  >
-                    Primary Output
-                  </button>
-                  {ocrData.rawPaddleText && (
-                    <button
-                      onClick={() => setActiveStreamTab('PADDLE')}
-                      className={`px-2 py-0.5 rounded text-[9px] font-bold font-mono transition-all ${
-                        activeStreamTab === 'PADDLE' ? 'bg-primary text-white' : 'text-muted hover:bg-border/30'
-                      }`}
-                    >
-                      PaddleOCR Stream
-                    </button>
-                  )}
-                  {ocrData.rawEasyText && (
-                    <button
-                      onClick={() => setActiveStreamTab('EASY')}
-                      className={`px-2 py-0.5 rounded text-[9px] font-bold font-mono transition-all ${
-                        activeStreamTab === 'EASY' ? 'bg-primary text-white' : 'text-muted hover:bg-border/30'
-                      }`}
-                    >
-                      EasyOCR Stream
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              <button 
-                onClick={() => copyText(getDisplayedStreamText())}
-                className="px-2.5 py-1 text-[9px] border rounded bg-background/50 hover:bg-background/80 text-muted transition-colors flex items-center gap-1 font-bold"
-              >
-                {copied ? <Check size={10} className="text-success" /> : <Copy size={10} />}
-                {copied ? 'Copied' : 'Copy Raw Text'}
-              </button>
+          {/* File Integrity Verification Box */}
+          <div className="p-4 border rounded-2xl bg-card/25 space-y-2 border-border/40">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold text-muted uppercase tracking-wider flex items-center gap-1.5">
+                <Shield size={12} className="text-primary" />
+                File Integrity &amp; Cryptographic Seal (ISO/IEC 27037)
+              </span>
+              <span className="text-[9px] bg-success/10 text-success border border-success/20 px-2 py-0.5 rounded font-mono font-bold">
+                Direct Byte Verification
+              </span>
             </div>
-
-            {/* Extracted text payload block */}
-            <pre className="text-[11px] leading-relaxed text-foreground bg-background/50 p-4 rounded-xl font-mono border border-border/10 select-all whitespace-pre-wrap break-words max-h-96 overflow-auto">
-              {getDisplayedStreamText()}
-            </pre>
-
-            {/* Re-run button */}
-            <div className="pt-2 flex justify-between items-center text-[10px] text-muted">
-              <span>Original evidence preserved without alterations.</span>
-              <button 
-                onClick={runOCRScan}
-                className="text-primary hover:underline font-bold flex items-center gap-1"
-              >
-                <RefreshCw size={10} />
-                Re-run OCR Scan
-              </button>
+            <div className="text-[10px] space-y-1">
+              <span className="text-muted block font-semibold">FILE SHA-256 HASH:</span>
+              <p className="font-mono text-foreground bg-background/50 p-2.5 rounded-lg border border-border/10 select-all break-all font-bold">
+                {ocrData.fileSha256 || selectedFile?.sha256 || "N/A"}
+              </p>
             </div>
           </div>
 
@@ -722,19 +899,53 @@ const EvidenceOCRPanel = ({ selectedFile, selectedCaseId, backendActive }) => {
   );
 };
 
-const EvidenceViewer = () => {
-  const { caseEvidence, selectedCaseId, backendActive, deleteEvidenceFile } = useProject();
+const EvidenceViewer = ({ setCurrentTab }) => {
+  const {
+    caseEvidence,
+    activeCase,
+    selectedCaseId,
+    backendActive,
+    deleteEvidenceFile,
+    focusedEvidenceId,
+    setFocusedEvidenceId,
+    preferredViewerTab,
+    setPreferredViewerTab
+  } = useProject();
+
+  const effectiveCaseId = activeCase?.id || selectedCaseId;
+
   const [selectedFileId, setSelectedFileId] = useState(caseEvidence[0]?.id || '');
   const [viewMode, setViewMode] = useState('STANDARD'); // STANDARD, HEX, OCR
   const [hexOffsetLimit, setHexOffsetLimit] = useState(128);
   const [fileExtractedData, setFileExtractedData] = useState(null);
+  const [loadingOcr, setLoadingOcr] = useState(false);
+
+  const [previewUrl, setPreviewUrl] = useState(null);
+  const [rawTextPreview, setRawTextPreview] = useState(null);
+  const [rawBytesPreview, setRawBytesPreview] = useState(null);
+  const [contentError, setContentError] = useState(null);
 
   // Read authenticated user role
   const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
   const roleLevel = storedUser.role_level || 'SysAdmin';
 
+  // Jump directly to requested evidence item & tab (e.g. from EvidenceUpload or AISummary)
+  useEffect(() => {
+    if (focusedEvidenceId && caseEvidence && caseEvidence.length > 0) {
+      if (caseEvidence.some(f => f.id === focusedEvidenceId)) {
+        setSelectedFileId(focusedEvidenceId);
+        if (preferredViewerTab) {
+          setViewMode(preferredViewerTab);
+        }
+        setFocusedEvidenceId(null);
+        setPreferredViewerTab('STANDARD');
+      }
+    }
+  }, [focusedEvidenceId, preferredViewerTab, caseEvidence, setFocusedEvidenceId, setPreferredViewerTab]);
+
   // Synchronize selected file ID whenever active case or case evidence changes
-  React.useEffect(() => {
+  useEffect(() => {
+    if (focusedEvidenceId) return;
     if (caseEvidence && caseEvidence.length > 0) {
       if (!caseEvidence.some(f => f.id === selectedFileId)) {
         setSelectedFileId(caseEvidence[0].id);
@@ -742,91 +953,182 @@ const EvidenceViewer = () => {
     } else {
       setSelectedFileId('');
     }
-  }, [caseEvidence, selectedFileId]);
+  }, [caseEvidence, selectedFileId, focusedEvidenceId]);
 
   const selectedFile = caseEvidence.find(f => f.id === selectedFileId) || caseEvidence[0];
 
-  // Fetch extracted OCR / Content record on evidence file change
+  // Fetch extracted OCR record on evidence file change
   useEffect(() => {
+    let cancelled = false;
     setFileExtractedData(null);
-    if (backendActive && isValidCaseIdentifier(selectedCaseId) && isUUID(selectedFile?.id)) {
+
+    if (backendActive && isValidCaseIdentifier(effectiveCaseId) && isUUID(selectedFile?.id)) {
+      setLoadingOcr(true);
       const token = localStorage.getItem('token');
       const authHeader = token ? { 'Authorization': `Bearer ${token}` } : {};
 
-      fetch(`${API_BASE_URL}/cases/${selectedCaseId}/evidence/${selectedFile.id}/ocr`, { headers: authHeader })
+      fetch(`${API_BASE_URL}/cases/${effectiveCaseId}/evidence/${selectedFile.id}/ocr`, { headers: authHeader })
         .then(res => res.ok ? res.json() : null)
         .then(data => {
+          if (cancelled) return;
+          setLoadingOcr(false);
           if (data && Array.isArray(data) && data.length > 0) {
-            const lastRecord = data[data.length - 1];
-            setFileExtractedData(lastRecord);
+            setFileExtractedData(data[data.length - 1]);
           }
         })
-        .catch(() => {});
+        .catch(() => {
+          if (!cancelled) setLoadingOcr(false);
+        });
+    } else {
+      setLoadingOcr(false);
     }
-  }, [selectedFile?.id, selectedCaseId, backendActive]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedFile?.id, effectiveCaseId, backendActive]);
+
+  // Fetch authentic raw file bytes from storage vault for image preview, plain text inspection, and real hex dump
+  const selectedContentId = selectedFile?.id;
+  const selectedContentSize = selectedFile?.fileSize || 0;
+  const selectedIsImage = isImageEvidence(selectedFile);
+  const selectedIsText = isTextEvidence(selectedFile);
+
+  useEffect(() => {
+    let activeObjectUrl = null;
+    const controller = new AbortController();
+
+    setPreviewUrl(null);
+    setRawTextPreview(null);
+    setRawBytesPreview(null);
+    setContentError(null);
+
+    const shouldFetchContent =
+      backendActive &&
+      isValidCaseIdentifier(effectiveCaseId) &&
+      isUUID(selectedContentId) &&
+      selectedContentSize <= 15 * 1024 * 1024;
+
+    if (shouldFetchContent) {
+      const token = localStorage.getItem('token');
+      const authHeader = token ? { 'Authorization': `Bearer ${token}` } : {};
+
+      fetch(`${API_BASE_URL}/cases/${effectiveCaseId}/evidence/${selectedContentId}/content`, {
+        headers: authHeader,
+        signal: controller.signal
+      })
+        .then(async (res) => {
+          if (!res.ok) {
+            const errBody = await res.json().catch(() => ({}));
+            throw new Error(errBody.detail || `Original binary unavailable on storage node (HTTP ${res.status})`);
+          }
+          return res.blob();
+        })
+        .then(async (blob) => {
+          if (controller.signal.aborted) return;
+          if (selectedIsImage) {
+            activeObjectUrl = URL.createObjectURL(blob);
+            setPreviewUrl(activeObjectUrl);
+          }
+          if (selectedIsText) {
+            const txt = await blob.slice(0, 65536).text();
+            if (!controller.signal.aborted) setRawTextPreview(txt);
+          }
+          const sliceBuf = await blob.slice(0, 1024).arrayBuffer();
+          if (!controller.signal.aborted) setRawBytesPreview(new Uint8Array(sliceBuf));
+        })
+        .catch((err) => {
+          if (err.name !== 'AbortError' && !controller.signal.aborted) {
+            setContentError(err.message);
+          }
+        });
+    }
+
+    return () => {
+      controller.abort();
+      if (activeObjectUrl) URL.revokeObjectURL(activeObjectUrl);
+    };
+  }, [selectedContentId, selectedContentSize, selectedIsImage, selectedIsText, effectiveCaseId, backendActive]);
 
   // Actual extracted text only - NEVER inject fake Port 8080 or fake payload strings
+  const extData = fileExtractedData?.extracted_data || {};
   const extractedTextContent = fileExtractedData?.extracted_text || '';
-  const extractedNumbers = fileExtractedData?.extracted_data?.numbers || [];
-  const extractedDates = fileExtractedData?.extracted_data?.dates || [];
-  const extractedTimes = fileExtractedData?.extracted_data?.times || [];
-  const extractedAmounts = fileExtractedData?.extracted_data?.amounts || [];
-  const extractedPeople = fileExtractedData?.extracted_data?.people || [];
-  const extractedIds = fileExtractedData?.extracted_data?.ids || [];
-  const extractedThreats = fileExtractedData?.extracted_data?.threats || [];
-  const mediaClassification = fileExtractedData?.extracted_data?.media_classification || null;
+  const extractedNumbers = extData.numbers || [];
+  const extractedDates = extData.dates || [];
+  const extractedTimes = extData.times || [];
+  const extractedAmounts = extData.amounts || [];
+  const extractedPeople = extData.people || [];
+  const extractedIds = extData.ids || [];
+  const extractedUpiIds = extData.upi_ids || [];
+  const extractedBanking = extData.banking_details || [];
+  const extractedStatus = extData.status_signals || [];
+  const extractedThreats = extData.threats || [];
+  const mediaClassification = extData.media_classification || null;
 
-  // Mock Hex dump generator
-  const getHexDump = (fileName) => {
+  const isEngineUnavailable = mediaClassification?.media_class === 'OCR_ENGINE_UNAVAILABLE';
+  const isCrimeScene = mediaClassification?.media_class === 'CRIME_SCENE_MEDIA' || selectedFile?.anomalies?.some(a => a.type === 'CRIME_SCENE_MEDIA');
+
+  // Authentic hex dump from real uploaded bytes only
+  const getRealHexDump = (bytes, limit) => {
+    if (!bytes || bytes.length === 0) return [];
     const lines = [];
-    const hexChars = '0123456789abcdef';
-    for (let offset = 0; offset < hexOffsetLimit; offset += 16) {
+    const maxLen = Math.min(bytes.length, limit);
+    for (let offset = 0; offset < maxLen; offset += 16) {
       let hexPart = '';
       let asciiPart = '';
       for (let i = 0; i < 16; i++) {
-        const val = Math.abs((fileName.charCodeAt((offset + i) % fileName.length) || 0) * (offset + i + 17)) % 256;
-        hexPart += hexChars[(val >> 4) & 0x0f] + hexChars[val & 0x0f] + ' ';
-        asciiPart += val >= 32 && val <= 126 ? String.fromCharCode(val) : '.';
+        if (offset + i < maxLen) {
+          const val = bytes[offset + i];
+          hexPart += val.toString(16).toUpperCase().padStart(2, '0') + ' ';
+          asciiPart += val >= 32 && val <= 126 ? String.fromCharCode(val) : '.';
+        } else {
+          hexPart += '   ';
+          asciiPart += ' ';
+        }
       }
       lines.push({
         offset: offset.toString(16).toUpperCase().padStart(8, '0'),
-        hex: hexPart.toUpperCase(),
+        hex: hexPart,
         ascii: asciiPart
       });
     }
     return lines;
   };
 
-  // Mock Log parsing
-  const getLogLines = () => {
-    return [
-      { num: 1, time: '08:10:00', host: '192.168.12.93', msg: 'sshd[293A]: Connection accepted from remote socket' },
-      { num: 2, time: '08:10:02', host: '192.168.12.93', msg: 'sshd[293A]: PAM authentication: failed credentials for user root', anomaly: true },
-      { num: 3, time: '08:11:15', host: '192.168.12.93', msg: 'sshd[293A]: PAM authentication: password bypass token applied', anomaly: true },
-      { num: 4, time: '08:12:00', host: '192.168.12.93', msg: 'sshd[293A]: Session opened for user root under tty1' },
-      { num: 5, time: '08:14:10', host: '192.168.12.93', msg: 'sudo[301F]: root: executed deletion task over sqlite databases', anomaly: true }
-    ];
-  };
+  const realHexLines = getRealHexDump(rawBytesPreview, hexOffsetLimit);
+  const plainTextToDisplay = rawTextPreview || extractedTextContent;
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-extrabold text-foreground tracking-tight">Evidence Examiner & Viewer</h2>
-          <p className="text-xs text-muted">Inspect raw hex strings, syslog content, genuine OCR text, and cryptographic signatures</p>
+          <h2 className="text-xl font-extrabold text-foreground tracking-tight">Evidence Examiner &amp; Viewer</h2>
+          <p className="text-xs text-muted">Inspect uploaded files, genuine multi-engine OCR text, binary hex headers, and cryptographic signatures</p>
         </div>
         
-        {/* Selector */}
-        <select
-          value={selectedFileId}
-          onChange={(e) => setSelectedFileId(e.target.value)}
-          className="bg-background border rounded-lg px-4 py-2 text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all max-w-xs font-semibold"
-        >
-          {caseEvidence.map(f => (
-            <option key={f.id} value={f.id}>{f.fileName}</option>
-          ))}
-        </select>
+        {/* Selector + Quick OCR Shortcut */}
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={selectedFileId}
+            onChange={(e) => setSelectedFileId(e.target.value)}
+            className="bg-background border rounded-lg px-4 py-2 text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all max-w-xs"
+          >
+            {caseEvidence.map(f => (
+              <option key={f.id} value={f.id}>{f.fileName}</option>
+            ))}
+          </select>
+
+          {selectedFile && viewMode !== 'OCR' && (
+            <button
+              onClick={() => setViewMode('OCR')}
+              className="bg-primary hover:bg-primary-dark text-white rounded-lg px-3.5 py-2 text-xs font-bold transition-all shadow flex items-center gap-1.5"
+            >
+              <Search size={13} />
+              <span>View Extracted OCR Text</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {selectedFile ? (
@@ -865,7 +1167,7 @@ const EvidenceViewer = () => {
                     <button
                       onClick={async () => {
                         if (window.confirm(`Are you sure you want to permanently purge evidence file '${selectedFile.fileName}'? This action is recorded in the Chain of Custody.`)) {
-                          await deleteEvidenceFile(selectedCaseId, selectedFile.id);
+                          await deleteEvidenceFile(effectiveCaseId, selectedFile.id);
                           alert(`File '${selectedFile.fileName}' purged from evidence vault by Level 4 SysAdmin.`);
                         }
                       }}
@@ -913,7 +1215,7 @@ const EvidenceViewer = () => {
           {/* Interactive Workspace Viewer Panel */}
           <div className="lg:col-span-3 border rounded-2xl glassmorphism overflow-hidden flex flex-col min-h-[500px]">
             {/* Nav View Tabs */}
-            <div className="bg-border/20 border-b px-4 py-2 flex items-center justify-between">
+            <div className="bg-border/20 border-b px-4 py-2 flex flex-wrap items-center justify-between gap-2">
               <div className="flex gap-2">
                 <button
                   onClick={() => setViewMode('STANDARD')}
@@ -952,53 +1254,59 @@ const EvidenceViewer = () => {
               {/* Mode 1: Standard view */}
               {viewMode === 'STANDARD' && (
                 <div className="space-y-4 h-full">
-                  {/* Categorized Displays */}
-                  {selectedFile.fileType.includes('Image') ? (
-                    <div className="flex flex-col items-center justify-center space-y-4">
-                      <div className="relative border rounded-xl overflow-hidden shadow-lg border-primary/30 max-w-sm">
-                        <div className="w-[300px] h-[200px] bg-slate-300 dark:bg-slate-800 flex items-center justify-center text-muted font-bold text-xs p-4 text-center">
-                          {selectedFile.fileName}
+                  {/* Genuine Image Preview */}
+                  {isImageEvidence(selectedFile) ? (
+                    <div className="flex flex-col items-center justify-center space-y-3">
+                      {previewUrl ? (
+                        <div className="relative border rounded-xl overflow-hidden shadow-lg border-primary/30 bg-slate-950/60 p-2">
+                          <img
+                            src={previewUrl}
+                            alt={selectedFile.fileName}
+                            className="max-h-72 max-w-full object-contain rounded-lg"
+                          />
                         </div>
-                      </div>
-                      <div className="text-center p-2 max-w-md">
-                        <h4 className="text-xs font-bold text-foreground">Evidence File Container: {selectedFile.fileName}</h4>
-                        <p className="text-[10px] text-muted mt-1 leading-relaxed">
-                          To extract and examine text, dates, numbers, and identifiers, switch to the <strong>OCR Scanner</strong> tab.
-                        </p>
+                      ) : (
+                        <div className="w-full max-w-md p-6 border border-dashed rounded-xl bg-card/30 text-center space-y-1.5">
+                          <p className="text-xs font-bold text-foreground">{selectedFile.fileName}</p>
+                          <p className="text-[10px] text-muted">
+                            {contentError
+                              ? `Binary image preview unavailable (${contentError}). Saved OCR text & hashes below remain accessible.`
+                              : backendActive
+                                ? 'Loading authentic image bytes from vault...'
+                                : 'Log in to live backend to preview uploaded image binaries.'}
+                          </p>
+                        </div>
+                      )}
+                      <div className="text-center p-1 max-w-lg flex flex-wrap items-center justify-center gap-2 text-[10px] text-muted">
+                        <span>Container: <strong className="text-foreground">{selectedFile.fileName}</strong></span>
+                        <button
+                          onClick={() => setViewMode('OCR')}
+                          className="text-primary hover:underline font-bold inline-flex items-center gap-1"
+                        >
+                          Open Full OCR Telemetry &amp; Entities <ArrowRight size={11} />
+                        </button>
                       </div>
                     </div>
-                  ) : selectedFile.fileType.includes('Log') || selectedFile.fileName.includes('logs') ? (
-                    <div className="border rounded-xl overflow-hidden font-mono text-[10px] bg-card/40 animate-fade-in">
-                      <table className="w-full text-left border-collapse">
-                        <thead>
-                          <tr className="bg-border/40 text-muted uppercase border-b">
-                            <th className="p-2 w-10">L#</th>
-                            <th className="p-2 w-20">Time</th>
-                            <th className="p-2 w-24">Client Host</th>
-                            <th className="p-2">Syslog Message Trace</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {getLogLines().map((line) => (
-                            <tr 
-                              key={line.num} 
-                              className={`border-b hover:bg-border/10 transition-colors ${
-                                line.anomaly ? 'bg-danger/5 text-danger font-semibold' : 'text-foreground'
-                              }`}
-                            >
-                              <td className="p-2 border-r focus:outline-none">{line.num}</td>
-                              <td className="p-2 border-r">{line.time}</td>
-                              <td className="p-2 border-r font-bold">{line.host}</td>
-                              <td className="p-2 flex items-center justify-between">
-                                <span>{line.msg}</span>
-                                {line.anomaly && (
-                                  <span className="text-[8px] border border-danger/30 bg-danger/10 px-1 rounded font-black max-h-[14px]">FLAGGED</span>
-                                )}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                  ) : isTextEvidence(selectedFile) ? (
+                    <div className="border rounded-xl p-4 bg-card/30 space-y-2 animate-fade-in">
+                      <div className="flex items-center justify-between border-b pb-2 border-border/20">
+                        <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                          <FileText size={13} className="text-primary" />
+                          Authentic Plain Text / Log Content
+                        </span>
+                        <span className="text-[9px] font-mono text-muted">
+                          {rawTextPreview ? 'Loaded directly from storage vault' : 'Parsed from saved extraction record'}
+                        </span>
+                      </div>
+                      {plainTextToDisplay ? (
+                        <pre className="text-[11px] font-mono text-foreground bg-background/60 p-3 rounded-lg border border-border/20 max-h-72 overflow-auto whitespace-pre-wrap break-words select-all leading-relaxed">
+                          {plainTextToDisplay}
+                        </pre>
+                      ) : (
+                        <p className="text-xs text-muted italic">
+                          {contentError || 'Plain text bytes unavailable on storage node.'}
+                        </p>
+                      )}
                     </div>
                   ) : null}
 
@@ -1013,7 +1321,7 @@ const EvidenceViewer = () => {
                             <AlertTriangle size={12} />
                             CRITICAL FORENSIC THREAT IDENTIFIED
                           </span>
-                          <span className="text-[10px] font-bold text-danger">Criminal Intent & Contraband Analyzer</span>
+                          <span className="text-[10px] font-bold text-danger">Criminal Intent &amp; Contraband Analyzer</span>
                         </div>
                         {extractedThreats.length > 0 ? (
                           <div className="space-y-1.5 mt-2">
@@ -1037,79 +1345,131 @@ const EvidenceViewer = () => {
                         )}
                       </div>
                     )}
+
                     {selectedFile.exif ? (
                       <div className="border rounded-xl p-4 bg-card/30 space-y-3">
                         <h4 className="text-xs font-bold text-foreground flex items-center gap-1">
                           <FileText size={12} className="text-primary" />
-                          Extracted EXIF Camera Header Metadata
+                          Extracted Container / EXIF Metadata
                         </h4>
-                        <div className="grid grid-cols-2 gap-4 text-[10px] leading-relaxed">
-                          <div><span className="text-muted block">CAMERA:</span> <strong className="text-foreground">{selectedFile.exif.camera}</strong></div>
-                          <div><span className="text-muted block">GPS MATRIX COORDINATES:</span> <strong className="text-foreground">{selectedFile.exif.gps}</strong></div>
-                          <div><span className="text-muted block">ORIGINAL TIMESTAMP:</span> <strong className="text-foreground">{selectedFile.exif.timestamp}</strong></div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-[10px] leading-relaxed">
+                          <div><span className="text-muted block">CAMERA / PRODUCER:</span> <strong className="text-foreground break-words">{selectedFile.exif.camera}</strong></div>
+                          <div><span className="text-muted block">GPS COORDINATES:</span> <strong className="text-foreground break-words">{selectedFile.exif.gps}</strong></div>
+                          <div><span className="text-muted block">CAPTURE / DOC TIMESTAMP:</span> <strong className="text-foreground break-words">{selectedFile.exif.timestamp}</strong></div>
                         </div>
                       </div>
                     ) : null}
                     
                     {/* Extracted Text Box */}
                     <div className="border rounded-xl p-4 bg-card/25 space-y-3 font-mono text-[10.5px] leading-relaxed">
-                      <div className="flex items-center justify-between border-b pb-2 border-border/20">
-                        <h4 className="text-xs font-bold text-foreground flex items-center gap-1 font-sans">
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2 border-border/20">
+                        <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5 font-sans">
                           <FileText size={12} className="text-primary" />
-                          Extracted Text Payload
+                          Extracted Text Payload (OCR)
+                          {typeof fileExtractedData?.confidence_score === 'number' && !isEngineUnavailable && (
+                            <span className="text-[9px] font-mono font-bold bg-primary/10 text-primary px-2 py-0.5 rounded ml-1">
+                              {fileExtractedData.confidence_score.toFixed(1)}% Mean Conf
+                            </span>
+                          )}
                         </h4>
-                        {extractedTextContent && (
+                        <div className="flex items-center gap-2 font-sans">
+                          {extractedTextContent && !isEngineUnavailable && (
+                            <button
+                              onClick={() => navigator.clipboard.writeText(extractedTextContent)}
+                              className="px-2 py-1 text-[9px] border rounded bg-background/50 hover:bg-background/80 text-muted font-bold"
+                            >
+                              Copy Text
+                            </button>
+                          )}
                           <button
-                            onClick={() => navigator.clipboard.writeText(extractedTextContent)}
-                            className="px-2 py-1 text-[9px] border rounded bg-background/50 hover:bg-background/80 text-muted font-bold"
+                            onClick={() => setViewMode('OCR')}
+                            className="px-2.5 py-1 text-[9px] border border-primary/30 rounded bg-primary/10 hover:bg-primary/20 text-primary font-bold"
                           >
-                            Copy Text
+                            Inspect in OCR Scanner
                           </button>
-                        )}
+                        </div>
                       </div>
-                      {extractedTextContent ? (
-                        <pre className="text-foreground bg-background/50 p-3 rounded-lg border border-border/10 select-all font-mono whitespace-pre-wrap break-words max-h-60 overflow-auto">
+
+                      {loadingOcr ? (
+                        <div className="p-6 flex items-center justify-center gap-2 text-xs text-muted font-sans">
+                          <Loader2 size={14} className="animate-spin text-primary" />
+                          <span>Loading saved OCR text from database...</span>
+                        </div>
+                      ) : isEngineUnavailable ? (
+                        <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg text-center space-y-2 font-sans">
+                          <AlertCircle size={22} className="text-amber-500 mx-auto" />
+                          <h5 className="text-xs font-bold text-amber-500">Previous OCR Engine Run Incomplete</h5>
+                          <p className="text-xs text-muted max-w-md mx-auto">
+                            {mediaClassification?.ocr_explanation || extractedTextContent}
+                          </p>
+                          <button
+                            onClick={() => setViewMode('OCR')}
+                            className="bg-primary text-white px-3 py-1.5 rounded-lg text-xs font-bold inline-flex items-center gap-1"
+                          >
+                            <RefreshCw size={12} />
+                            Re-run OCR Scanner
+                          </button>
+                        </div>
+                      ) : extractedTextContent ? (
+                        <pre className="text-foreground bg-background/50 p-3 rounded-lg border border-border/10 select-all font-mono whitespace-pre-wrap break-words max-h-64 overflow-auto">
                           {extractedTextContent}
                         </pre>
+                      ) : isCrimeScene ? (
+                        <div className="p-4 bg-background/40 border border-danger/30 rounded-lg text-center space-y-2 font-sans">
+                          <AlertTriangle size={24} className="text-danger mx-auto" />
+                          <h5 className="text-xs font-bold text-danger">Physical Crime Scene Media (Non-Document Evidence)</h5>
+                          <p className="text-xs text-muted max-w-md mx-auto">
+                            This photograph is flagged as physical crime scene evidence. Optical Character Recognition (OCR) is intended for text documents and receipts.
+                          </p>
+                        </div>
+                      ) : !fileExtractedData ? (
+                        <div className="p-4 bg-background/40 border border-border/20 rounded-lg text-center space-y-2 font-sans">
+                          <p className="text-xs text-muted">
+                            No OCR extraction record has been executed for this file yet.
+                          </p>
+                          <button
+                            onClick={() => setViewMode('OCR')}
+                            className="bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 px-3 py-1.5 rounded-lg text-xs font-bold transition-all inline-flex items-center gap-1"
+                          >
+                            <Search size={12} />
+                            Open OCR Scanner to Extract Text
+                          </button>
+                        </div>
                       ) : (
-                        <div className="p-4 bg-background/40 border border-border/20 rounded-lg text-center space-y-2">
-                          {selectedFile.anomalies?.some(a => a.type === 'CRIME_SCENE_MEDIA') ? (
-                            <>
-                              <AlertTriangle size={24} className="text-danger mx-auto" />
-                              <h5 className="text-xs font-bold text-danger">Physical Crime Scene Media (Non-Document Evidence)</h5>
-                              <p className="text-xs text-muted font-sans max-w-md mx-auto">
-                                This photograph is flagged as physical crime scene evidence (e.g. suspected shooting/weapon/violent act). OCR is only applicable to text documents and receipts, not physical scene photographs.
-                              </p>
-                            </>
-                          ) : selectedFile.fileName?.match(/\.(txt|log|csv|md)$/i) ? (
-                            <>
-                              <FileText size={24} className="text-primary mx-auto" />
-                              <h5 className="text-xs font-bold text-foreground">Plain Text Evidence Document</h5>
-                              <p className="text-xs text-muted font-sans max-w-md mx-auto">
-                                Digital plain text file parsed directly. Standard OCR is bypassed for native digital text.
-                              </p>
-                            </>
-                          ) : (
-                            <>
-                              <p className="text-xs text-muted font-sans">
-                                Visual Photographic Evidence: No typographical text detected. Optical Character Recognition (OCR) applies only to text-bearing screenshots and scanned documents.
-                              </p>
-                              <button
-                                onClick={() => setViewMode('OCR')}
-                                className="bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 px-3 py-1.5 rounded-lg text-xs font-bold font-sans transition-all inline-flex items-center gap-1"
-                              >
-                                <Search size={12} />
-                                Open OCR Scanner to Inspect
-                              </button>
-                            </>
-                          )}
+                        <div className="p-4 bg-background/40 border border-border/20 rounded-lg text-center space-y-2 font-sans">
+                          <p className="text-xs text-muted">
+                            OCR engines completed and detected no typographical text in this file.
+                          </p>
+                          <button
+                            onClick={() => setViewMode('OCR')}
+                            className="bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 px-3 py-1.5 rounded-lg text-xs font-bold transition-all inline-flex items-center gap-1"
+                          >
+                            <Search size={12} />
+                            Inspect OCR Engine Telemetry
+                          </button>
                         </div>
                       )}
                     </div>
 
-                    {/* Isolated Entities Grid (Numbers, Dates, Amounts, People) */}
-                    {(extractedNumbers.length > 0 || extractedDates.length > 0 || extractedAmounts.length > 0 || extractedPeople.length > 0) && (
+                    {/* Isolated Entities Grid (Status, Amounts, People, Dates, Times, IDs, UPI, Banking, Numbers) */}
+                    {(extractedStatus.length > 0 || extractedAmounts.length > 0 || extractedPeople.length > 0 || extractedDates.length > 0 || extractedTimes.length > 0 || extractedIds.length > 0 || extractedUpiIds.length > 0 || extractedBanking.length > 0 || extractedNumbers.length > 0) && (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {extractedStatus.length > 0 && (
+                          <div className="p-3 border rounded-xl bg-background/30 space-y-2 md:col-span-2">
+                            <span className="text-[9px] font-bold text-success uppercase block tracking-wider flex items-center gap-1">
+                              <CheckCircle2 size={11} />
+                              Transaction Status Signals
+                            </span>
+                            <div className="flex flex-wrap gap-1.5">
+                              {extractedStatus.map((s, i) => (
+                                <span key={i} className="px-2 py-0.5 rounded border border-success/30 bg-success/10 text-xs text-success font-bold">
+                                  {s}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
                         {extractedAmounts.length > 0 && (
                           <div className="p-3 border rounded-xl bg-background/30 space-y-2">
                             <span className="text-[9px] font-bold text-muted uppercase block tracking-wider flex items-center gap-1">
@@ -1142,17 +1502,71 @@ const EvidenceViewer = () => {
                           </div>
                         )}
 
-                        {extractedDates.length > 0 && (
+                        {(extractedDates.length > 0 || extractedTimes.length > 0) && (
                           <div className="p-3 border rounded-xl bg-background/30 space-y-2">
                             <span className="text-[9px] font-bold text-muted uppercase block tracking-wider flex items-center gap-1">
                               <Calendar size={11} className="text-primary" />
-                              Extracted Dates
+                              Extracted Dates &amp; Times
                             </span>
                             <div className="flex flex-wrap gap-1.5">
                               {extractedDates.map((dt, i) => (
-                                <span key={i} className="px-2 py-0.5 rounded border border-primary/20 bg-primary/5 font-mono text-[9px] text-primary font-bold flex items-center gap-1">
+                                <span key={`d-${i}`} className="px-2 py-0.5 rounded border border-primary/20 bg-primary/5 font-mono text-[9px] text-primary font-bold flex items-center gap-1">
                                   <Calendar size={8} />
                                   {dt}
+                                </span>
+                              ))}
+                              {extractedTimes.map((tm, i) => (
+                                <span key={`t-${i}`} className="px-2 py-0.5 rounded border bg-background/50 font-mono text-[9px] text-foreground font-bold flex items-center gap-1">
+                                  <Clock size={8} />
+                                  {tm}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {extractedIds.length > 0 && (
+                          <div className="p-3 border rounded-xl bg-background/30 space-y-2">
+                            <span className="text-[9px] font-bold text-muted uppercase block tracking-wider flex items-center gap-1">
+                              <Key size={11} className="text-primary" />
+                              Transaction IDs &amp; UTRs
+                            </span>
+                            <div className="flex flex-col gap-1">
+                              {extractedIds.map((idv, i) => (
+                                <span key={i} className="px-2 py-0.5 rounded border bg-background/50 font-mono text-[9px] text-foreground font-bold break-all">
+                                  {idv}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {extractedUpiIds.length > 0 && (
+                          <div className="p-3 border rounded-xl bg-background/30 space-y-2">
+                            <span className="text-[9px] font-bold text-muted uppercase block tracking-wider flex items-center gap-1">
+                              <AtSign size={11} className="text-primary" />
+                              UPI Handles
+                            </span>
+                            <div className="flex flex-wrap gap-1.5">
+                              {extractedUpiIds.map((u, i) => (
+                                <span key={i} className="px-2 py-0.5 rounded border border-accent/20 bg-accent/5 font-mono text-[9px] text-accent font-bold">
+                                  {u}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {extractedBanking.length > 0 && (
+                          <div className="p-3 border rounded-xl bg-background/30 space-y-2">
+                            <span className="text-[9px] font-bold text-muted uppercase block tracking-wider flex items-center gap-1">
+                              <Building2 size={11} className="text-primary" />
+                              Banking &amp; Accounts
+                            </span>
+                            <div className="flex flex-col gap-1">
+                              {extractedBanking.map((b, i) => (
+                                <span key={i} className="px-2 py-0.5 rounded border bg-background/50 font-mono text-[9px] text-foreground">
+                                  {b}
                                 </span>
                               ))}
                             </div>
@@ -1180,13 +1594,13 @@ const EvidenceViewer = () => {
                 </div>
               )}
 
-              {/* Mode 2: Hex view */}
+              {/* Mode 2: Hex view (authentic binary file header bytes) */}
               {viewMode === 'HEX' && (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between border-b pb-3">
                     <div>
                       <h4 className="text-xs font-bold text-foreground">Hexadecimal Payload Stream</h4>
-                      <p className="text-[10px] text-muted">Offsets mapped against binary evidence block memory</p>
+                      <p className="text-[10px] text-muted">Leading raw bytes read directly from stored evidence binary</p>
                     </div>
                     <select
                       value={hexOffsetLimit}
@@ -1200,15 +1614,23 @@ const EvidenceViewer = () => {
                     </select>
                   </div>
 
-                  <div className="font-mono text-[10px] leading-relaxed bg-card/60 p-4 border rounded-xl space-y-1 overflow-x-auto select-all">
-                    {getHexDump(selectedFile.fileName).map((row) => (
-                      <div key={row.offset} className="flex gap-4 hover:bg-primary/5 px-1 rounded">
-                        <span className="text-primary font-bold select-none">{row.offset}</span>
-                        <span className="text-muted tracking-widest">{row.hex}</span>
-                        <span className="text-foreground border-l pl-4 font-bold select-none">{row.ascii}</span>
-                      </div>
-                    ))}
-                  </div>
+                  {realHexLines.length > 0 ? (
+                    <div className="font-mono text-[10px] leading-relaxed bg-card/60 p-4 border rounded-xl space-y-1 overflow-x-auto select-all">
+                      {realHexLines.map((row) => (
+                        <div key={row.offset} className="flex gap-4 hover:bg-primary/5 px-1 rounded">
+                          <span className="text-primary font-bold select-none">{row.offset}</span>
+                          <span className="text-muted tracking-widest whitespace-pre">{row.hex}</span>
+                          <span className="text-foreground border-l pl-4 font-bold select-none whitespace-pre">{row.ascii}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-8 border border-dashed rounded-xl text-center text-xs text-muted">
+                      {contentError
+                        ? `Live binary hex stream unavailable (${contentError}).`
+                        : 'Log in to the live backend (files <= 15 MB) to inspect authentic raw file header bytes.'}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1216,8 +1638,9 @@ const EvidenceViewer = () => {
               {viewMode === 'OCR' && (
                 <EvidenceOCRPanel 
                   selectedFile={selectedFile}
-                  selectedCaseId={selectedCaseId}
+                  selectedCaseId={effectiveCaseId}
                   backendActive={backendActive}
+                  onOcrComplete={(newRec) => setFileExtractedData(newRec)}
                 />
               )}
 
@@ -1225,8 +1648,17 @@ const EvidenceViewer = () => {
           </div>
         </div>
       ) : (
-        <div className="p-12 text-center text-muted border border-dashed rounded-2xl">
+        <div className="p-12 text-center text-muted border border-dashed rounded-2xl space-y-3">
           <p className="text-xs">Select or ingest evidence to begin forensic verification.</p>
+          {setCurrentTab && (
+            <button
+              onClick={() => setCurrentTab('upload')}
+              className="bg-primary hover:bg-primary-dark text-white rounded-lg px-4 py-2 text-xs font-bold transition-all inline-flex items-center gap-1.5"
+            >
+              <span>Upload &amp; Scan New Evidence</span>
+              <ArrowRight size={13} />
+            </button>
+          )}
         </div>
       )}
     </div>

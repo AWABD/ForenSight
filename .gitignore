@@ -35,6 +35,9 @@ verification_vault/
 verification_test.db
 test_resolution.db
 test_resolution_vault/
+test_ocr_vault/
+test_ocr_fixtures/
+test_threat_vault/
 *.db
 backend/verification_test.db
 backend/verification_vault/

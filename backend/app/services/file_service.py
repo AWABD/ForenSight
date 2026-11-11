@@ -1,4 +1,5 @@
 import os
+import uuid
 import hashlib
 import re
 from pathlib import Path
@@ -57,6 +58,18 @@ class FileService:
             if not header_bytes.startswith(b"\x89\x50\x4e\x47\x0d\x0a\x1a\x0a"):
                 logger.warning(f"File signature mismatch: Png extension with mismatching header on '{filename}'")
                 return False
+        elif ext == ".webp":
+            if not (header_bytes[:4] == b"RIFF" and header_bytes[8:12] == b"WEBP"):
+                logger.warning(f"File signature mismatch: WebP extension with mismatching header on '{filename}'")
+                return False
+        elif ext == ".bmp":
+            if not header_bytes.startswith(b"BM"):
+                logger.warning(f"File signature mismatch: BMP extension with mismatching header on '{filename}'")
+                return False
+        elif ext == ".gif":
+            if not (header_bytes.startswith(b"GIF87a") or header_bytes.startswith(b"GIF89a")):
+                logger.warning(f"File signature mismatch: GIF extension with mismatching header on '{filename}'")
+                return False
         elif ext in [".db", ".sqlite"]:
             # SQLite format 3: 53 51 4c 69 74 65 20 66 6f 72 6d 61 74 20 33 00
             if not header_bytes.startswith(b"SQLite format 3\x00"):
@@ -101,7 +114,8 @@ class FileService:
         case_vault = Path(settings.STORAGE_VAULT_PATH) / case_id
         case_vault.mkdir(parents=True, exist_ok=True)
 
-        target_file_path = case_vault / sanitized_name
+        # Stage to a temporary filename first so we never overwrite an existing file in the same case
+        staged_file_path = case_vault / f".tmp_{uuid.uuid4().hex}_{sanitized_name}"
         
         # Initialize hash contexts
         sha256_hasher = hashlib.sha256()
@@ -116,7 +130,7 @@ class FileService:
             if not FileService.validate_file_magic_number(sanitized_name, header_chunk):
                 raise ValueError("File type signature mismatch. Binary magic number verification failed.")
             
-            with open(target_file_path, "wb") as out_file:
+            with open(staged_file_path, "wb") as out_file:
                 # Write and hash the first header chunk
                 if header_chunk:
                     out_file.write(header_chunk)
@@ -130,27 +144,85 @@ class FileService:
                     sha256_hasher.update(chunk)
                     sha3_hasher.update(chunk)
                     total_size += len(chunk)
-            
+
+            sha256_hex = sha256_hasher.hexdigest()
+            sha3_hex = sha3_hasher.hexdigest()
+
+            target_file_path = case_vault / sanitized_name
+            if target_file_path.exists():
+                target_file_path = case_vault / f"{sha256_hex[:8]}_{sanitized_name}"
+                if target_file_path.exists():
+                    target_file_path = case_vault / f"{uuid.uuid4().hex[:8]}_{sanitized_name}"
+
+            os.replace(staged_file_path, target_file_path)
             logger.info(f"Secure streamed upload completed. Path: {target_file_path}, Size: {total_size} bytes")
         except Exception as e:
             logger.error(f"Error occurred during secure file saving and hashing: {e}")
-            if target_file_path.exists():
-                os.remove(target_file_path)
+            if staged_file_path.exists():
+                os.remove(staged_file_path)
             raise e
 
         return (
             str(target_file_path),
             total_size,
-            sha256_hasher.hexdigest(),
-            sha3_hasher.hexdigest()
+            sha256_hex,
+            sha3_hex
         )
+
+    @staticmethod
+    def _extract_image_exif(file_path: str) -> dict:
+        """Reads authentic EXIF tags from an image file via Pillow without fabricating missing fields."""
+        exif_info = {
+            "camera": "No EXIF Camera Tag (Screenshot / Stripped)",
+            "gps": "No GPS EXIF Metadata",
+            "timestamp": "No EXIF Capture Timestamp",
+        }
+        try:
+            from PIL import Image, ExifTags
+            with Image.open(file_path) as img:
+                raw_exif = img.getexif()
+                dims = f"{img.width}x{img.height} {img.format or ''}".strip()
+                if raw_exif:
+                    tag_map = {ExifTags.TAGS.get(k, k): v for k, v in raw_exif.items()}
+                    make = str(tag_map.get("Make", "")).strip()
+                    model = str(tag_map.get("Model", "")).strip()
+                    cam = f"{make} {model}".strip()
+                    if cam:
+                        exif_info["camera"] = f"{cam} ({dims})"
+                    else:
+                        software = str(tag_map.get("Software", "")).strip()
+                        exif_info["camera"] = f"{software} ({dims})" if software else f"No EXIF Camera Tag ({dims})"
+
+                    dt_orig = tag_map.get("DateTimeOriginal") or tag_map.get("DateTimeDigitized") or tag_map.get("DateTime")
+                    if dt_orig:
+                        exif_info["timestamp"] = str(dt_orig).strip()
+
+                    gps_ifd = raw_exif.get_ifd(0x8825) if hasattr(raw_exif, "get_ifd") else None
+                    if gps_ifd:
+                        gps_tags = {ExifTags.GPSTAGS.get(k, k): v for k, v in gps_ifd.items()}
+                        if "GPSLatitude" in gps_tags and "GPSLongitude" in gps_tags:
+                            def _to_deg(vals):
+                                return float(vals[0]) + float(vals[1]) / 60.0 + float(vals[2]) / 3600.0
+                            try:
+                                lat = _to_deg(gps_tags["GPSLatitude"])
+                                if gps_tags.get("GPSLatitudeRef") == "S":
+                                    lat = -lat
+                                lon = _to_deg(gps_tags["GPSLongitude"])
+                                if gps_tags.get("GPSLongitudeRef") == "W":
+                                    lon = -lon
+                                exif_info["gps"] = f"{lat:.6f}, {lon:.6f}"
+                            except Exception:
+                                exif_info["gps"] = "GPS EXIF tag present (unparsed format)"
+                else:
+                    exif_info["camera"] = f"No EXIF Camera Tag ({dims})"
+        except Exception as exif_err:
+            logger.debug(f"Could not read EXIF metadata from '{file_path}': {exif_err}")
+        return exif_info
 
     @staticmethod
     def extract_forensic_metadata(file_name: str, file_path: str) -> dict:
         """
-        Mock metadata parser to inspect file headers or extension properties.
-        In later phases, this binds to PyTorch/spaCy.
-        For now, it returns mock data matching the frontend's expected properties.
+        Inspects file metadata & anomaly indicators truthfully without fabricating EXIF data.
         """
         # Ensure we check the sanitized filename
         clean_name = FileService.sanitize_filename(file_name)
@@ -160,30 +232,39 @@ class FileService:
             "anomalies": []
         }
 
-        # Handle Mock EXIF data for images
-        if extension in [".jpg", ".jpeg", ".png"]:
-            metadata["exif"] = {
-                "camera": "iPhone 13" if "exif" in clean_name.lower() else "Unknown camera body",
-                "gps": "28.6139, 77.2090 (New Delhi)" if "exif" in clean_name.lower() else "34.0522, -118.2437 (Los Angeles)",
-                "timestamp": "2026-07-28T08:12:00Z"
-            }
+        # Read genuine EXIF / container metadata where applicable
+        if extension in [".jpg", ".jpeg", ".png", ".webp", ".tiff", ".bmp", ".gif"]:
+            metadata["exif"] = FileService._extract_image_exif(file_path)
         elif extension == ".pdf":
-            metadata["exif"] = {
-                "camera": "Adobe Acrobat PDF Parser",
+            pdf_meta = {
+                "camera": "PDF Document Container",
                 "gps": "N/A (Document Metadata)",
-                "timestamp": "2026-07-28T09:30:15Z"
+                "timestamp": "No PDF CreationDate Tag"
             }
+            try:
+                import pypdf
+                reader = pypdf.PdfReader(file_path)
+                info = reader.metadata or {}
+                producer = str(info.get("/Producer") or info.get("/Creator") or "").strip()
+                cdate = str(info.get("/CreationDate") or info.get("/ModDate") or "").strip()
+                if producer:
+                    pdf_meta["camera"] = producer[:90]
+                if cdate:
+                    pdf_meta["timestamp"] = cdate[:60]
+            except Exception:
+                pass
+            metadata["exif"] = pdf_meta
         elif extension in [".zip", ".docx"]:
             metadata["exif"] = {
-                "camera": "Zip Archive Inspector v1.0",
+                "camera": f"{extension.upper().lstrip('.')} Container",
                 "gps": "N/A (Logical Archive)",
-                "timestamp": "2026-07-28T10:14:02Z"
+                "timestamp": "See internal archive timestamps"
             }
         elif extension in [".eml", ".msg"]:
             metadata["exif"] = {
-                "camera": "Internet Message Headers Parser",
-                "gps": "IP: 192.168.12.93 (Origin)",
-                "timestamp": "2026-07-28T08:10:00Z"
+                "camera": "Email Message Container",
+                "gps": "See raw MIME headers",
+                "timestamp": "See Date header in payload"
             }
 
         # Mock Anomalies detection matching frontend templates

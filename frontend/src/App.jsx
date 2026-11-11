@@ -122,12 +122,12 @@ const AppContent = () => {
         <div className="relative z-10 max-w-7xl mx-auto animate-fade-in">
           {currentTab === 'dashboard' && <Dashboard setCurrentTab={setCurrentTab} />}
           {currentTab === 'cases' && <Cases setCurrentTab={setCurrentTab} />}
-          {currentTab === 'upload' && <EvidenceUpload />}
-          {currentTab === 'viewer' && <EvidenceViewer />}
+          {currentTab === 'upload' && <EvidenceUpload setCurrentTab={setCurrentTab} />}
+          {currentTab === 'viewer' && <EvidenceViewer setCurrentTab={setCurrentTab} />}
           {currentTab === 'timeline' && <Timeline />}
           {currentTab === 'graph' && <RelationshipGraph />}
           {currentTab === 'search' && <Search />}
-          {currentTab === 'ai' && <AISummary />}
+          {currentTab === 'ai' && <AISummary setCurrentTab={setCurrentTab} />}
           {currentTab === 'report' && <ReportViewer />}
           {currentTab === 'admin' && <Admin />}
         </div>

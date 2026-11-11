@@ -1,5 +1,7 @@
+import os
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.case import Case
@@ -63,17 +65,22 @@ def upload_evidence(
             detail="Failed to save and hash uploaded evidence file"
         )
 
-    # Check if this exact file (same SHA256) is already uploaded to this case
+    # Check if this exact file (same SHA256) already exists (schema enforces global uniqueness on sha256_hash)
     duplicate = db.query(EvidenceFile).filter(
-        EvidenceFile.case_id == resolved_case_id,
         EvidenceFile.sha256_hash == sha256_hex
     ).first()
     
     if duplicate:
-        logger.warning(f"Duplicate upload skipped: file with SHA256 '{sha256_hex}' already exists in case '{resolved_case_id}'")
+        if target_path and target_path != duplicate.storage_vault_key and os.path.exists(target_path):
+            try:
+                os.remove(target_path)
+            except Exception as rm_err:
+                logger.warning(f"Failed to remove duplicate staging file '{target_path}': {rm_err}")
+        scope_msg = "this case" if duplicate.case_id == resolved_case_id else f"case ID {duplicate.case_id}"
+        logger.warning(f"Duplicate upload skipped: file with SHA256 '{sha256_hex}' already exists in {scope_msg}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Duplicate file error: A file with identical SHA256 hash already exists in this case."
+            detail=f"Duplicate file error: A file with identical SHA256 hash already exists in {scope_msg} ('{duplicate.file_name}')."
         )
 
     # Secure filename extraction and lookup properties
@@ -100,9 +107,9 @@ def upload_evidence(
     db.commit()
     db.refresh(new_evidence)
 
-    # Automatically run initial OCR / Content Parsing pipeline upon ingest
+    # Automatically run initial OCR / Content Parsing pipeline upon ingest (fast_mode keeps upload instant & reliable)
     try:
-        ocr_result = OCRService.run_ocr_pipeline(target_path, sanitized_filename)
+        ocr_result = OCRService.run_ocr_pipeline(target_path, sanitized_filename, fast_mode=True, case_id=resolved_case_id)
         db_ocr = OCRText(
             evidence_id=new_evidence.id,
             page_number=1,
@@ -127,10 +134,12 @@ def upload_evidence(
                     updated = True
             if updated:
                 new_evidence.anomalies = current_anomalies
-                db.commit()
-                db.refresh(new_evidence)
+        db.commit()
+        db.refresh(new_evidence)
     except Exception as ocr_err:
-        logger.warning(f"Auto-OCR background extraction deferred for '{sanitized_filename}': {ocr_err}")
+        db.rollback()
+        db.refresh(new_evidence)
+        logger.error(f"Auto-OCR extraction failed during upload of '{sanitized_filename}': {ocr_err}", exc_info=True)
 
     # Add dynamic Timeline Event representing file ingestion
     new_timeline_event = TimelineEvent(
@@ -202,6 +211,39 @@ def get_evidence(
         
     return evidence
 
+@router.get("/{evidence_id}/content")
+def get_evidence_content(
+    case_id: str,
+    evidence_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(RoleChecker(["SysAdmin", "LeadInvestigator", "Analyst", "LegalAuditor"]))
+):
+    """Streams authentic raw evidence bytes from the vault for image/text preview."""
+    case = CaseService.resolve_case(db, case_id)
+    if not CaseService.is_valid_uuid(evidence_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evidence file not found")
+
+    evidence = db.query(EvidenceFile).filter(
+        EvidenceFile.case_id == case.id,
+        EvidenceFile.id == evidence_id
+    ).first()
+
+    if not evidence:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evidence file not found")
+
+    resolved_path = OCRService._resolve_file_path(evidence.storage_vault_key, evidence.file_name, case_id=evidence.case_id)
+    if not resolved_path:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Evidence file '{evidence.file_name}' is unavailable on server storage vault."
+        )
+
+    return FileResponse(
+        path=resolved_path,
+        media_type=evidence.file_type or "application/octet-stream",
+        filename=evidence.file_name
+    )
+
 @router.post("/{evidence_id}/ocr", response_model=OCRResponse, status_code=status.HTTP_201_CREATED)
 def run_ocr_on_evidence(
     case_id: str,
@@ -211,7 +253,7 @@ def run_ocr_on_evidence(
 ):
     """
     Executes optical character recognition (OCR) comparison parsing on evidence file.
-    Runs EasyOCR and PaddleOCR comparison vectors, extracts Text, Tables, Numbers, Dates.
+    Runs PaddleOCR / RapidOCR and EasyOCR verification scans, extracts Text, Entities, Dates, Numbers.
     Saves outputs to the database and appends ledger blocks.
     """
     case = CaseService.resolve_case(db, case_id)
@@ -225,9 +267,17 @@ def run_ocr_on_evidence(
     
     if not evidence:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evidence file not found")
+
+    # Never save fake error strings into ocr_text when file bytes are missing on disk
+    resolved_path = OCRService._resolve_file_path(evidence.storage_vault_key, evidence.file_name, case_id=evidence.case_id)
+    if not resolved_path:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Evidence file '{evidence.file_name}' could not be located in server storage vault. Re-upload the file to run live pixel OCR."
+        )
         
-    # Execute OCR service
-    ocr_result = OCRService.run_ocr_pipeline(evidence.storage_vault_key, evidence.file_name)
+    # Execute full OCR service (PaddleOCR/RapidOCR + EasyOCR if available)
+    ocr_result = OCRService.run_ocr_pipeline(resolved_path, evidence.file_name, fast_mode=False, case_id=evidence.case_id)
     
     # Save output to database
     db_ocr = OCRText(
@@ -256,12 +306,15 @@ def run_ocr_on_evidence(
             evidence.anomalies = current_anomalies
     
     # Record timeline action
+    p_name = ocr_result["comparison"].get("paddleocr", {}).get("engine_name", "PaddleOCR")
+    e_status = ocr_result["comparison"].get("easyocr", {}).get("status", "NOT_AVAILABLE")
+    engine_desc = f"{p_name} + EasyOCR" if e_status == "SUCCESS" else p_name
     new_timeline_event = TimelineEvent(
         case_id=case.id,
         evidence_file_id=evidence.id,
         timestamp_source="AI OCR Engine",
         event_type="AI_INFERENCE",
-        description=f"Executed OCR engine scans (EasyOCR & PaddleOCR). Extracted text characters with {ocr_result['confidence_score']:.1f}% confidence.",
+        description=f"Executed OCR scan ({engine_desc}). Mean confidence: {ocr_result['confidence_score']:.1f}%.",
         severity="INFO"
     )
     db.add(new_timeline_event)
@@ -293,7 +346,7 @@ def get_ocr_records(
     db: Session = Depends(get_db),
     current_user: User = Depends(RoleChecker(["SysAdmin", "LeadInvestigator", "Analyst", "LegalAuditor"]))
 ):
-    """Retrieves all saved OCR scanner outputs for specific evidence file."""
+    """Retrieves all saved OCR scanner outputs for specific evidence file ordered chronologically."""
     case = CaseService.resolve_case(db, case_id)
     if not CaseService.is_valid_uuid(evidence_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evidence file not found")
@@ -307,7 +360,7 @@ def get_ocr_records(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evidence file not found")
         
     try:
-        return db.query(OCRText).filter(OCRText.evidence_id == evidence_id).all()
+        return db.query(OCRText).filter(OCRText.evidence_id == evidence_id).order_by(OCRText.scanned_at.asc()).all()
     except Exception as e:
         logger.error(f"Failed to query OCR records for evidence '{evidence_id}': {e}")
         return []

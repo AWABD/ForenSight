@@ -1,13 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useProject } from '../contexts/ProjectContext';
+import { API_BASE_URL } from '../config';
 import { 
   FileUp, ShieldAlert, HardDrive, ShieldCheck, Loader2, 
   Trash2, FileText, FileArchive, Mail, CheckCircle2, 
-  FileDown, Compass, Calendar, AlertTriangle
+  FileDown, Compass, Calendar, AlertTriangle, Search, Eye, ChevronRight
 } from 'lucide-react';
 
-const EvidenceUpload = () => {
-  const { cases, selectedCaseId, setSelectedCaseId, addEvidenceFile, activeCase } = useProject();
+const EvidenceUpload = ({ setCurrentTab }) => {
+  const { cases, selectedCaseId, setSelectedCaseId, addEvidenceFile, activeCase, openEvidenceInViewer } = useProject();
   const [targetCaseId, setTargetCaseId] = useState(selectedCaseId);
   const [dragActive, setDragActive] = useState(false);
   const [file, setFile] = useState(null);
@@ -33,7 +34,7 @@ const EvidenceUpload = () => {
   const canUpload = roleLevel === 'SysAdmin' || roleLevel === 'LeadInvestigator';
 
   // Allowed extensions list
-  const ALLOWED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.pdf', '.docx', '.txt', '.log', '.csv', '.eml', '.msg', '.zip'];
+  const ALLOWED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.pdf', '.docx', '.txt', '.log', '.csv', '.eml', '.msg', '.zip'];
 
   const validateFileType = (fileName) => {
     const ext = '.' + fileName.split('.').pop().toLowerCase();
@@ -42,7 +43,7 @@ const EvidenceUpload = () => {
 
   const getFileIcon = (fileName) => {
     const ext = '.' + fileName.split('.').pop().toLowerCase();
-    if (['.jpg', '.jpeg', '.png'].includes(ext)) return null; // Image preview will handle it
+    if (['.jpg', '.jpeg', '.png', '.webp', '.bmp'].includes(ext)) return null; // Image preview will handle it
     if (['.eml', '.msg'].includes(ext)) return <Mail className="text-blue-400 w-12 h-12" />;
     if (['.zip'].includes(ext)) return <FileArchive className="text-amber-500 w-12 h-12" />;
     if (ext === '.pdf') return <FileText className="text-red-400 w-12 h-12" />;
@@ -92,7 +93,7 @@ const EvidenceUpload = () => {
 
     // Create Image URL Preview
     const ext = '.' + selectedFile.name.split('.').pop().toLowerCase();
-    if (['.jpg', '.jpeg', '.png'].includes(ext)) {
+    if (['.jpg', '.jpeg', '.png', '.webp', '.bmp'].includes(ext)) {
       setFilePreview(URL.createObjectURL(selectedFile));
       setTextPreview('');
     } else if (['.txt', '.log', '.csv'].includes(ext)) {
@@ -109,77 +110,94 @@ const EvidenceUpload = () => {
     }
   };
 
-  const handleUploadSubmit = (e) => {
+  const handleUploadSubmit = async (e) => {
     e.preventDefault();
     if (!file) return;
 
     setUploading(true);
-    setProgress(0);
-    setStatusLog('INITIALIZING SAFE UPLOAD GATEWAY...');
+    setErrorMessage('');
+    setIngestedRecord(null);
+    setProgress(20);
+    setStatusLog('VALIDATING BINARY SIGNATURE & STREAMING TO FORENSIGHT VAULT...');
 
-    // Simulate forensic pipeline stages
-    const stages = [
-      { p: 15, log: 'READING FILE BINARY HEADER (SIGNATURE INTRUSION CHECK)...' },
-      { p: 40, log: 'COMPUTING BASELINE CRYPTOGRAPHIC HASH (SHA-256)...' },
-      { p: 65, log: 'CALCULATING ALTERNATE CRYPTOGRAPHIC DIGEST (SHA-3)...' },
-      { p: 85, log: 'PARSING META-CONTAINER STRUCTURES & STUBBING ANOMALIES...' },
-      { p: 100, log: 'INGESTING TO OBJECT VAULT & APENDING LEDGER BLOCK...' }
-    ];
+    const chosenCase = cases.find(c => c.id === targetCaseId || c.caseNumber === targetCaseId) || 
+                       cases.find(c => c.id === selectedCaseId || c.caseNumber === selectedCaseId) || 
+                       activeCase;
+    const finalCaseId = chosenCase?.id || targetCaseId;
 
-    let currentStageIndex = 0;
-    const interval = setInterval(() => {
-      if (currentStageIndex < stages.length) {
-        const stage = stages[currentStageIndex];
-        setProgress(stage.p);
-        setStatusLog(stage.log);
-        currentStageIndex++;
-      } else {
-        clearInterval(interval);
-        setUploading(false);
-        
-        // Mock checking duplicate hashes if the name triggers duplicate testing
-        if (file.name.includes('dup') || file.name.includes('duplicate')) {
-          setErrorMessage("Duplicate File Error: A file with identical SHA-256 hash already exists in this case database.");
-          return;
-        }
+    const progressTimer = setInterval(() => {
+      setProgress(prev => {
+        if (prev < 80) return prev + 12;
+        return prev;
+      });
+    }, 350);
 
-        // Apply file upload to context state: ensure target UUID is resolved
-        const chosenCase = cases.find(c => c.id === targetCaseId || c.caseNumber === targetCaseId) || 
-                           cases.find(c => c.id === selectedCaseId || c.caseNumber === selectedCaseId) || 
-                           activeCase;
-        const finalCaseId = chosenCase?.id || targetCaseId;
-        addEvidenceFile(finalCaseId, file);
-        
-        // Calculate hash key mapping (mimic backend SHA hashes)
-        const mockSHA256 = `f8c3c4d1de0ba3f1a0e1c6b54a8e2bc70c67feaae8${Math.floor(1000 + Math.random()*9000).toString(16)}`;
-        const mockSHA3 = `sha3_c6b54a8e2bc70c67feaa3a3c6b5773a4421a4b5992a7fb3a121${Math.floor(100 + Math.random()*900)}`;
+    try {
+      setStatusLog('COMPUTING SHA-256 / SHA3-256 & EXECUTING AUTO-OCR EXTRACTION...');
+      const created = await addEvidenceFile(finalCaseId, file);
+      clearInterval(progressTimer);
 
-        const isTampered = file.name.includes('tamper') || file.name.includes('compromised') || file.name.includes('deepfake');
-
-        setIngestedRecord({
-          name: file.name,
-          size: file.size,
-          type: file.type || 'application/octet-stream',
-          sha256: mockSHA256,
-          sha3: mockSHA3,
-          vaultPath: `storage_vault/${targetCaseId}/${file.name}`,
-          metadata: {
-            camera: ['jpg', 'jpeg', 'png'].includes(file.name.split('.').pop().toLowerCase()) 
-                      ? (file.name.includes('exif') ? 'iPhone 13' : 'Unknown / Spoofed EXIF')
-                      : 'ForenSight Format Parser v1.0',
-            gps: file.name.includes('exif') ? '28.6139, 77.2090 (New Delhi)' : 'N/A (Logical File)',
-            timestamp: new Date().toISOString()
-          },
-          anomalies: isTampered ? [
-            { type: 'SIGNATURE_CHECK_WARNING', severity: 'HIGH', message: 'Anomalous binary flags inside file metadata.' }
-          ] : []
-        });
-        
-        setFile(null);
-        setFilePreview(null);
-        setTextPreview('');
+      if (!created || !created.id) {
+        throw new Error('Server did not return an evidence record identifier.');
       }
-    }, 850);
+
+      setProgress(90);
+      setStatusLog('FETCHING INITIAL OCR TEXT & ENTITIES...');
+
+      let ocrRecord = null;
+      if (!created.offlineDemo) {
+        try {
+          const token = localStorage.getItem('token');
+          const authHeader = token ? { 'Authorization': `Bearer ${token}` } : {};
+          const ocrCaseId = created.case_id || finalCaseId;
+          const ocrRes = await fetch(`${API_BASE_URL}/cases/${ocrCaseId}/evidence/${created.id}/ocr`, {
+            headers: authHeader
+          });
+          if (ocrRes.ok) {
+            const ocrList = await ocrRes.json();
+            if (Array.isArray(ocrList) && ocrList.length > 0) {
+              ocrRecord = ocrList[ocrList.length - 1];
+            }
+          }
+        } catch (ocrFetchErr) {
+          console.warn('Could not fetch initial OCR record preview:', ocrFetchErr);
+        }
+      }
+
+      setProgress(100);
+      setStatusLog('INGESTION & CRYPTOGRAPHIC SEAL COMPLETE');
+      setUploading(false);
+
+      setIngestedRecord({
+        id: created.id,
+        caseId: created.case_id || finalCaseId,
+        offlineDemo: Boolean(created.offlineDemo),
+        name: created.file_name || file.name,
+        size: created.file_size_bytes ?? file.size,
+        type: created.file_type || file.type || 'application/octet-stream',
+        sha256: created.sha256_hash,
+        sha3: created.sha3_hash,
+        vaultPath: created.storage_vault_key,
+        metadata: created.exif || {
+          camera: 'No EXIF Metadata',
+          gps: 'N/A',
+          timestamp: created.ingested_at || new Date().toISOString()
+        },
+        ingestedAt: created.ingested_at || new Date().toISOString(),
+        anomalies: created.anomalies || [],
+        ocrRecord
+      });
+
+      setFile(null);
+      setFilePreview(null);
+      setTextPreview('');
+    } catch (err) {
+      clearInterval(progressTimer);
+      setUploading(false);
+      setProgress(0);
+      setStatusLog('');
+      setErrorMessage(err.message || 'Evidence upload failed. Check backend connection and try again.');
+    }
   };
 
   const removeSelectedFile = () => {
@@ -376,19 +394,53 @@ const EvidenceUpload = () => {
             <div className="p-5 border border-success/20 bg-success/5 rounded-2xl space-y-4 animate-fade-in relative overflow-hidden shadow-lg">
               <div className="absolute top-0 left-0 w-1.5 h-full bg-success" />
               
-              <div className="flex items-start gap-3">
-                <div className="bg-success/20 text-success p-1.5 rounded-lg">
-                  <ShieldCheck size={20} />
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div className="bg-success/20 text-success p-1.5 rounded-lg">
+                    <ShieldCheck size={20} />
+                  </div>
+                  <div className="space-y-0.5">
+                    <h4 className="text-xs font-bold text-foreground">
+                      Forensic Evidence Seal Acquired — <span className="font-mono text-primary">{ingestedRecord.name}</span>
+                    </h4>
+                    <p className="text-[10px] text-muted">
+                      {ingestedRecord.offlineDemo
+                        ? 'Saved in offline preview mode (log in to live backend to run server OCR).'
+                        : 'Written to vault storage with genuine SHA-256 seal & auto-OCR scan.'}
+                    </p>
+                  </div>
                 </div>
-                <div className="space-y-0.5">
-                  <h4 className="text-xs font-bold text-foreground">Forensic Evidence Seal Acquired</h4>
-                  <p className="text-[10px] text-muted">The file has been successfully written to vault storage in compliance with ISO/IEC 27037.</p>
-                </div>
+
+                {!ingestedRecord.offlineDemo && setCurrentTab && (
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() => {
+                        openEvidenceInViewer(ingestedRecord.id, 'OCR');
+                        setCurrentTab('viewer');
+                      }}
+                      className="bg-primary hover:bg-primary-dark text-white rounded-lg px-3.5 py-2 text-[11px] font-bold transition-all shadow flex items-center gap-1.5"
+                    >
+                      <Search size={13} />
+                      <span>Open Full OCR Text</span>
+                      <ChevronRight size={13} />
+                    </button>
+                    <button
+                      onClick={() => {
+                        openEvidenceInViewer(ingestedRecord.id, 'STANDARD');
+                        setCurrentTab('viewer');
+                      }}
+                      className="border hover:bg-border/20 text-foreground rounded-lg px-3 py-2 text-[11px] font-bold transition-all flex items-center gap-1.5"
+                    >
+                      <Eye size={13} />
+                      <span>Viewer</span>
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[10px]">
                 <div className="p-3 border rounded-xl bg-background/50 space-y-2">
-                  <span className="text-[9px] font-bold text-primary uppercase block">Cryptographic Hashes</span>
+                  <span className="text-[9px] font-bold text-primary uppercase block">Cryptographic Hashes (Calculated from File Bytes)</span>
                   <div className="space-y-1.5 font-mono text-[9px] text-muted">
                     <div className="truncate select-all" title={ingestedRecord.sha256}>
                       <strong className="text-foreground">SHA-256:</strong> {ingestedRecord.sha256}
@@ -403,20 +455,70 @@ const EvidenceUpload = () => {
                   <span className="text-[9px] font-bold text-primary uppercase block">Extracted Meta Parameters</span>
                   <div className="space-y-1 text-muted">
                     <div className="flex items-center gap-1.5">
-                      <Compass size={12} className="text-primary/70" />
-                      <span>{ingestedRecord.metadata.camera}</span>
+                      <Compass size={12} className="text-primary/70 shrink-0" />
+                      <span className="truncate">{ingestedRecord.metadata?.camera || 'N/A'}</span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <HardDrive size={12} className="text-primary/70" />
-                      <span className="truncate max-w-[150px]">{ingestedRecord.metadata.gps}</span>
+                      <HardDrive size={12} className="text-primary/70 shrink-0" />
+                      <span className="truncate">{ingestedRecord.metadata?.gps || 'N/A'}</span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <Calendar size={12} className="text-primary/70" />
-                      <span>{new Date(ingestedRecord.metadata.timestamp).toLocaleTimeString()} (Sealed Date)</span>
+                      <Calendar size={12} className="text-primary/70 shrink-0" />
+                      <span className="truncate">{ingestedRecord.metadata?.timestamp || ingestedRecord.ingestedAt}</span>
                     </div>
                   </div>
                 </div>
               </div>
+
+              {/* Instant OCR Text Preview right inside Upload Confirmation */}
+              {ingestedRecord.ocrRecord && (
+                <div className="p-4 border rounded-xl bg-background/70 space-y-3">
+                  <div className="flex items-center justify-between border-b border-border/20 pb-2">
+                    <span className="text-[10px] font-bold text-primary uppercase tracking-wider flex items-center gap-1.5">
+                      <FileText size={13} />
+                      Auto-Extracted OCR Text Preview
+                    </span>
+                    <span className="text-[9px] font-mono font-bold bg-primary/10 text-primary px-2 py-0.5 rounded">
+                      Mean Confidence: {Number(ingestedRecord.ocrRecord.confidence_score || 0).toFixed(1)}%
+                    </span>
+                  </div>
+
+                  {/* Quick detected entity chips */}
+                  {ingestedRecord.ocrRecord.extracted_data && (
+                    <div className="flex flex-wrap gap-1.5 text-[10px]">
+                      {(ingestedRecord.ocrRecord.extracted_data.amounts || []).map((a, i) => (
+                        <span key={`amt-${i}`} className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-mono font-bold">
+                          Amount: {a}
+                        </span>
+                      ))}
+                      {(ingestedRecord.ocrRecord.extracted_data.dates || []).map((d, i) => (
+                        <span key={`dt-${i}`} className="px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 font-mono font-bold">
+                          Date: {d}
+                        </span>
+                      ))}
+                      {(ingestedRecord.ocrRecord.extracted_data.people || []).map((p, i) => (
+                        <span key={`pe-${i}`} className="px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-bold">
+                          Person: {p}
+                        </span>
+                      ))}
+                      {(ingestedRecord.ocrRecord.extracted_data.upi_ids || []).map((u, i) => (
+                        <span key={`upi-${i}`} className="px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-mono font-bold">
+                          UPI: {u}
+                        </span>
+                      ))}
+                      {(ingestedRecord.ocrRecord.extracted_data.ids || []).slice(0, 3).map((idv, i) => (
+                        <span key={`id-${i}`} className="px-2 py-0.5 rounded bg-border/30 text-foreground border font-mono">
+                          {idv}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  <pre className="text-[11px] font-mono text-foreground bg-card/50 p-3 rounded-lg border border-border/20 max-h-44 overflow-auto whitespace-pre-wrap break-words select-all leading-relaxed">
+                    {ingestedRecord.ocrRecord.extracted_text}
+                  </pre>
+                </div>
+              )}
 
               {ingestedRecord.anomalies.length > 0 && (
                 <div className="p-3 border border-warning/20 bg-warning/5 rounded-xl text-[10px] text-muted flex gap-2">

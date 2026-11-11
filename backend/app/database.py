@@ -218,7 +218,7 @@ def migrate_database(db_engine):
                     "h256": h256,
                     "h3": h3,
                     "key": fname,
-                    "anom": json.dumps(anomalies) if is_postgres else anomalies,
+                    "anom": json.dumps(anomalies),
                     "created": datetime.utcnow()
                 })
 
